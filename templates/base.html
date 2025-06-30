@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Flot{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    
+    <style>
+        :root {
+            --flot-blue-dark: #20466B;
+            --flot-blue: #2B5C88;
+            --flot-bg: #f8fafc;
+            --flot-white: #fff;
+        }
+        .sidebar {
+            min-height: 100vh;
+            background: var(--flot-blue-dark);
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: 240px;
+            z-index: 1000;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.85);
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            margin: 0.25rem 0;
+            transition: all 0.3s ease;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            color: var(--flot-blue-dark);
+            background-color: var(--flot-white);
+            font-weight: bold;
+            transform: translateX(5px);
+        }
+        .main-content {
+            background-color: var(--flot-bg);
+            min-height: 100vh;
+            margin-left: 240px;
+            margin-right: auto;
+            max-width: 1200px;
+            padding-left: 24px;
+            padding-right: 24px;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 0.125rem 0.25rem rgba(32,70,107,0.08);
+            transition: transform 0.2s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        .btn-primary {
+            background: var(--flot-blue-dark);
+            border: none;
+            border-radius: 10px;
+            padding: 0.5rem 1.5rem;
+        }
+        .btn-primary:hover {
+            background: var(--flot-blue);
+            box-shadow: 0 4px 8px rgba(32,70,107,0.15);
+        }
+        .form-control {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+        .form-control:focus {
+            border-color: var(--flot-blue);
+            box-shadow: 0 0 0 0.2rem rgba(32,70,107,0.10);
+        }
+        .table {
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .alert {
+            border-radius: 10px;
+            border: none;
+        }
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2rem;
+            gap: 0.7rem;
+        }
+        .sidebar-logo img {
+            height: 38px;
+            width: 38px;
+            object-fit: contain;
+        }
+        .sidebar-logo span {
+            display: none; /* On masque le texte */
+        }
+        /* Ajout du bandeau blanc arrondi pour le logo */
+        .logo-bandeau {
+            background: var(--flot-white);
+            border-radius: 50%;
+            width: 110px;
+            height: 110px;
+            margin: 24px auto 32px auto;
+            box-shadow: 0 2px 8px rgba(32,70,107,0.04);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .logo-bandeau img {
+            max-width: 90%;
+            max-height: 90%;
+            width: auto;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                z-index: 1000;
+                transition: left 0.3s ease;
+            }
+            .sidebar.show {
+                left: 0;
+            }
+            .main-content {
+                margin-left: 0;
+            }
+        }
+        body {
+            padding-left: 240px;
+        }
+        @media (max-width: 768px) {
+            body {
+                padding-left: 0;
+            }
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body style="background: var(--flot-bg);">
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse" id="sidebar">
+                <div class="position-sticky pt-3">
+                    <div class="sidebar-logo logo-bandeau">
+                        <img src="{{ url_for('static', filename='logo_flot.png') }}" alt="Logo Flot">
+                    </div>
+                    
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
+                                <i class="fas fa-home me-2"></i>
+                                Accueil
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}">
+                                <i class="fas fa-clipboard-list me-2"></i>
+                                Relevés SMP
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}">
+                                <i class="fas fa-clipboard-list me-2"></i>
+                                Relevés LPZ
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}">
+                                <i class="fas fa-history me-2"></i>
+                                Historique
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}">
+                                <i class="fas fa-chart-line me-2"></i>
+                                Indicateurs
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}">
+                                <i class="fas fa-camera me-2"></i>
+                                Relevé du 20
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}">
+                                <i class="fas fa-tasks me-2"></i>
+                                Routines
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item mt-4">
+                            <a class="nav-link" href="{{ url_for('logout') }}">
+                                <i class="fas fa-sign-out-alt me-2"></i>
+                                Déconnexion
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+            
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                <!-- Mobile menu button -->
+                <div class="d-md-none mt-3 mb-3">
+                    <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+                
+                <!-- Flash messages -->
+                {% with messages = get_flashed_messages() %}
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <!-- Page content -->
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script>
+        // Auto-hide alerts after 5 seconds
+        setTimeout(function() {
+            var alerts = document.querySelectorAll('.alert:not(.alert-persist)');
+            alerts.forEach(function(alert) {
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close();
+            });
+        }, 5000);
+        
+        // Mobile sidebar toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            var sidebar = document.getElementById('sidebar');
+            var sidebarToggle = document.querySelector('[data-bs-toggle="collapse"]');
+            
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('show');
+                });
+            }
+            
+            // Close sidebar when clicking outside on mobile
+            document.addEventListener('click', function(event) {
+                if (window.innerWidth <= 768) {
+                    if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
+                        sidebar.classList.remove('show');
+                    }
+                }
+            });
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html> 
