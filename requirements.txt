@@ -10,4 +10,5 @@ Pillow>=10.0.0
 python-dotenv>=1.0.0
 Werkzeug>=2.3.0
 matplotlib>=3.0.0
-fpdf>=1.7.2 
+fpdf>=1.7.2
+gunicorn>=21.0.0 
