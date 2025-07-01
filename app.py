@@ -729,33 +729,27 @@ def api_releves_smp() -> Union[Response, Tuple[Response, int]]:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'Données JSON requises'}), 400
-        
         try:
             date_obj = datetime.strptime(data['date'], '%Y-%m-%d').date()
         except (KeyError, ValueError):
             return jsonify({'error': 'Date invalide'}), 400
-        
         # Traiter chaque relevé
         for releve_data in data.get('releves', []):
+            if not isinstance(releve_data, dict):
+                continue  # sécurité : ignorer si ce n'est pas un dict
             type_releve_id = releve_data.get('type_releve_id')
             valeur = releve_data.get('valeur')
-            
             if type_releve_id is None or valeur is None:
                 continue
-            
-            # Vérifier si un relevé existe déjà
             releve_existant = Releve.query.filter_by(
                 type_releve_id=type_releve_id,
                 date=date_obj
             ).first()
-            
             if releve_existant:
-                # Mettre à jour le relevé existant
                 releve_existant.valeur = valeur
                 releve_existant.commentaire = releve_data.get('commentaire', '')
                 releve_existant.utilisateur_id = current_user.id
             else:
-                # Créer un nouveau relevé
                 nouveau_releve = Releve(
                     date=date_obj,
                     type_releve_id=type_releve_id,
@@ -764,15 +758,12 @@ def api_releves_smp() -> Union[Response, Tuple[Response, int]]:
                     utilisateur_id=current_user.id
                 )
                 db.session.add(nouveau_releve)
-        
         try:
             db.session.commit()
             return jsonify({'success': True})
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': f'Erreur lors de la sauvegarde: {str(e)}'}), 500
-    
-    # Valeur de retour par défaut pour les méthodes non supportées
     return jsonify({'error': 'Méthode non supportée'}), 405
 
 @app.route('/api/releves_lpz', methods=['GET', 'POST'])
@@ -821,33 +812,26 @@ def api_releves_lpz() -> Union[Response, Tuple[Response, int]]:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'Données JSON requises'}), 400
-        
         try:
             date_obj = datetime.strptime(data['date'], '%Y-%m-%d').date()
         except (KeyError, ValueError):
             return jsonify({'error': 'Date invalide'}), 400
-        
-        # Traiter chaque relevé
         for releve_data in data.get('releves', []):
+            if not isinstance(releve_data, dict):
+                continue
             type_releve_id = releve_data.get('type_releve_id')
             valeur = releve_data.get('valeur')
-            
             if type_releve_id is None or valeur is None:
                 continue
-            
-            # Vérifier si un relevé existe déjà
             releve_existant = Releve.query.filter_by(
                 type_releve_id=type_releve_id,
                 date=date_obj
             ).first()
-            
             if releve_existant:
-                # Mettre à jour le relevé existant
                 releve_existant.valeur = valeur
                 releve_existant.commentaire = releve_data.get('commentaire', '')
                 releve_existant.utilisateur_id = current_user.id
             else:
-                # Créer un nouveau relevé
                 nouveau_releve = Releve(
                     date=date_obj,
                     type_releve_id=type_releve_id,
@@ -856,15 +840,12 @@ def api_releves_lpz() -> Union[Response, Tuple[Response, int]]:
                     utilisateur_id=current_user.id
                 )
                 db.session.add(nouveau_releve)
-        
         try:
             db.session.commit()
             return jsonify({'success': True})
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': f'Erreur lors de la sauvegarde: {str(e)}'}), 500
-    
-    # Valeur de retour par défaut pour les méthodes non supportées
     return jsonify({'error': 'Méthode non supportée'}), 405
 
 @app.route('/api/veille/<int:site_id>')
