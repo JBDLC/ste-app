@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}Gestion des utilisateurs{% endblock %}
+{% block content %}
+<div class="container py-4">
+    <h2 class="mb-4">Gestion des utilisateurs</h2>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5>Créer un nouvel utilisateur</h5>
+            <form id="create-user-form" class="row g-3 align-items-stretch">
+                <div class="col-12 col-md-6 mb-2 mb-md-0">
+                    <input type="text" class="form-control" name="username" placeholder="Nom d'utilisateur" required>
+                </div>
+                <div class="col-12 col-md-5 mb-2 mb-md-0">
+                    <input type="password" class="form-control" name="password" placeholder="Mot de passe" required>
+                </div>
+                <div class="col-12 col-md-1 d-grid">
+                    <button type="submit" class="btn btn-primary w-100">Créer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <h5>Utilisateurs existants</h5>
+            <div class="table-responsive" style="overflow-x:auto;">
+                <table class="table table-bordered align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            {% for page in page_names %}
+                                <th>{{ page|replace('_', ' ')|capitalize }}</th>
+                            {% endfor %}
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr data-user-id="{{ user.id }}">
+                            <td>{{ user.username }}</td>
+                            {% for page in page_names %}
+                                <td>
+                                    <input type="checkbox" class="form-check-input page-access-checkbox" data-page="{{ page }}" {% if user.role == 'admin' or (user.page_accesses|selectattr('page_name', 'equalto', page)|map(attribute='can_access')|first) %}checked{% endif %} {% if user.role == 'admin' %}disabled{% endif %}>
+                                </td>
+                            {% endfor %}
+                            <td class="text-center">
+                                <span class="edit-user-btn" title="Modifier" style="cursor:pointer; margin-right: 4px; vertical-align:middle; display:inline-block;">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#1976d2"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-2.828 0L5 12.828a2 2 0 010-2.828L9 13z"/></svg>
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de modification utilisateur -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editUserModalLabel">Modifier l'utilisateur</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        <form id="edit-user-form">
+          <input type="hidden" name="user_id">
+          <div class="mb-3">
+            <label class="form-label">Nom d'utilisateur</label>
+            <input type="text" class="form-control" name="username" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Nouveau mot de passe (laisser vide pour ne pas changer)</label>
+            <input type="password" class="form-control" name="password">
+          </div>
+        </form>
+        <div class="d-flex justify-content-end">
+          <button id="delete-user-modal-btn" class="btn btn-danger" style="display:none;">Supprimer l'utilisateur</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="submit" form="edit-user-form" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function reloadUsers() {
+    fetch('/api/utilisateurs')
+        .then(r => r.json())
+        .then(users => {
+            const tbody = document.querySelector('table tbody');
+            tbody.innerHTML = '';
+            users.forEach(user => {
+                let tr = document.createElement('tr');
+                tr.setAttribute('data-user-id', user.id);
+                tr.innerHTML = `
+                    <td>${user.username}</td>
+                    {% for page in page_names %}
+                        <td>
+                            <input type="checkbox" class="form-check-input page-access-checkbox" data-page="{{ page }}" ${user.role === 'admin' || user.page_accesses['{{ page }}'] ? 'checked' : ''} ${user.role === 'admin' ? 'disabled' : ''}>
+                        </td>
+                    {% endfor %}
+                    <td>
+                        ${user.role !== 'admin' ? '<span class="edit-user-btn" title="Modifier" style="cursor:pointer; margin-right: 4px; vertical-align:middle; display:inline-block;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#1976d2"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-2.828 0L5 12.828a2 2 0 010-2.828L9 13z"/></svg></span>' : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        });
+}
+
+document.getElementById('create-user-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const data = {
+        username: form.username.value,
+        password: form.password.value
+    };
+    fetch('/api/utilisateurs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            reloadUsers();
+            form.reset();
+            alert('Utilisateur créé !');
+        } else {
+            alert(res.error || 'Erreur lors de la création');
+        }
+    });
+});
+
+document.querySelector('table').addEventListener('click', function(e) {
+    if (e.target.closest('.delete-user-btn')) {
+        const tr = e.target.closest('tr');
+        const userId = tr.getAttribute('data-user-id');
+        if (confirm('Supprimer cet utilisateur ?')) {
+            fetch(`/api/utilisateurs/${userId}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        reloadUsers();
+                        alert('Utilisateur supprimé');
+                    } else {
+                        alert(res.error || 'Erreur lors de la suppression');
+                    }
+                });
+        }
+    }
+});
+
+document.querySelector('table').addEventListener('change', function(e) {
+    if (e.target.classList.contains('page-access-checkbox')) {
+        const tr = e.target.closest('tr');
+        const userId = tr.getAttribute('data-user-id');
+        const checkboxes = tr.querySelectorAll('.page-access-checkbox');
+        const data = {};
+        checkboxes.forEach(cb => {
+            data[cb.getAttribute('data-page')] = cb.checked;
+        });
+        fetch(`/api/utilisateurs/${userId}/droits`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) {
+                alert(res.error || 'Erreur lors de la modification des droits');
+            }
+        });
+    }
+});
+
+// MODIFICATION/SUPPRESSION UTILISATEUR AVEC SVG
+let editUserModal = new bootstrap.Modal(document.getElementById('editUserModal'));
+document.querySelector('table').addEventListener('click', function(e) {
+    // Edit
+    if (e.target.closest('.edit-user-btn')) {
+        const tr = e.target.closest('tr');
+        const userId = tr.getAttribute('data-user-id');
+        const username = tr.children[0].textContent;
+        const role = tr.children[1].textContent;
+        const form = document.getElementById('edit-user-form');
+        form.user_id.value = userId;
+        form.username.value = username;
+        const deleteBtn = document.getElementById('delete-user-modal-btn');
+        if (username.trim() === 'admin') {
+            deleteBtn.style.display = 'none';
+            deleteBtn.removeAttribute('data-user-id');
+        } else {
+            deleteBtn.style.display = 'inline-block';
+            deleteBtn.setAttribute('data-user-id', userId);
+        }
+        form.password.value = '';
+        editUserModal.show();
+    }
+});
+document.getElementById('edit-user-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const userId = form.user_id.value;
+    const data = {
+        username: form.username.value,
+        password: form.password.value
+    };
+    fetch(`/api/utilisateurs/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            reloadUsers();
+            setTimeout(bindCheckboxEvents, 100);
+            editUserModal.hide();
+            alert('Utilisateur modifié !');
+        } else {
+            alert(res.error || 'Erreur lors de la modification');
+        }
+    });
+});
+
+// Suppression depuis le modal
+document.getElementById('delete-user-modal-btn').addEventListener('click', function(e) {
+    e.preventDefault();
+    const userId = e.target.getAttribute('data-user-id');
+    if (confirm('Supprimer cet utilisateur ?')) {
+        fetch(`/api/utilisateurs/${userId}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    reloadUsers();
+                    setTimeout(bindCheckboxEvents, 100);
+                    editUserModal.hide();
+                    alert('Utilisateur supprimé');
+                } else {
+                    alert(res.error || 'Erreur lors de la suppression');
+                }
+            });
+    }
+});
+
+// Gestion dynamique des cases à cocher (droits)
+function bindCheckboxEvents() {
+    document.querySelectorAll('.page-access-checkbox').forEach(cb => {
+        cb.onchange = function(e) {
+            const tr = e.target.closest('tr');
+            const userId = tr.getAttribute('data-user-id');
+            const checkboxes = tr.querySelectorAll('.page-access-checkbox');
+            const data = {};
+            checkboxes.forEach(cb2 => {
+                data[cb2.getAttribute('data-page')] = cb2.checked;
+            });
+            fetch(`/api/utilisateurs/${userId}/droits`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) {
+                    alert(res.error || 'Erreur lors de la modification des droits');
+                }
+            });
+        }
+    });
+}
+
+// Appeler après chaque reloadUsers
+const oldReloadUsers = reloadUsers;
+reloadUsers = function() { oldReloadUsers(); setTimeout(bindCheckboxEvents, 100); };
+bindCheckboxEvents();
+</script>
+{% endblock %}
+{% block extra_css %}
+<style>
+@media (max-width: 768px) {
+    .card-body h5 { font-size: 1.1rem; }
+    .table-responsive { margin-bottom: 1rem; }
+    .btn { font-size: 1rem; padding: 0.5rem 1rem; }
+    .edit-user-btn, .delete-user-btn { width: 100%; margin-bottom: 0.25rem; }
+}
+</style>
+{% endblock %} 

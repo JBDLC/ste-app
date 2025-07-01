@@ -7,7 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
     
     <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Plotly.js -->
@@ -20,6 +20,10 @@
             --flot-bg: #f8fafc;
             --flot-white: #fff;
         }
+        body {
+            background: var(--flot-bg);
+        }
+        /* Sidebar PC/tablette */
         .sidebar {
             min-height: 100vh;
             background: var(--flot-blue-dark);
@@ -100,10 +104,6 @@
             width: 38px;
             object-fit: contain;
         }
-        .sidebar-logo span {
-            display: none; /* On masque le texte */
-        }
-        /* Ajout du bandeau blanc arrondi pour le logo */
         .logo-bandeau {
             background: var(--flot-white);
             border-radius: 50%;
@@ -123,134 +123,156 @@
             display: block;
             margin: 0 auto;
         }
-        @media (max-width: 768px) {
+        /* Responsive : masquer la sidebar et adapter le contenu sur mobile */
+        @media (max-width: 991.98px) {
             .sidebar {
-                position: fixed;
-                top: 0;
-                left: -100%;
-                width: 100%;
-                z-index: 1000;
-                transition: left 0.3s ease;
-            }
-            .sidebar.show {
-                left: 0;
+                display: none !important;
             }
             .main-content {
                 margin-left: 0;
+                padding: 16px 2px 16px 2px;
             }
         }
-        body {
-            padding-left: 240px;
+        /* Navbar mobile */
+        .navbar {
+            background: var(--flot-blue-dark) !important;
         }
-        @media (max-width: 768px) {
-            body {
-                padding-left: 0;
-            }
+        .navbar-brand, .navbar-nav .nav-link {
+            color: #fff !important;
+        }
+        .navbar-brand img {
+            height: 38px;
+            width: 38px;
+            object-fit: contain;
+        }
+        .offcanvas {
+            background: var(--flot-blue-dark);
+            color: #fff;
+        }
+        .offcanvas .nav-link {
+            color: #fff;
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+        .offcanvas .nav-link.active, .offcanvas .nav-link:hover {
+            background: var(--flot-white);
+            color: var(--flot-blue-dark) !important;
+            font-weight: bold;
+        }
+        .offcanvas-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+        .offcanvas-logo img {
+            height: 48px;
+            width: 48px;
+            object-fit: contain;
+            filter: brightness(0) invert(1); /* logo blanc */
         }
     </style>
     
     {% block extra_css %}{% endblock %}
 </head>
-<body style="background: var(--flot-bg);">
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse" id="sidebar">
-                <div class="position-sticky pt-3">
-                    <div class="sidebar-logo logo-bandeau">
-                        <img src="{{ url_for('static', filename='logo_flot.png') }}" alt="Logo Flot">
-                    </div>
-                    
-                    <ul class="nav flex-column">
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
-                                <i class="fas fa-home me-2"></i>
-                                Accueil
-                            </a>
-                        </li>
-                        
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}">
-                                <i class="fas fa-clipboard-list me-2"></i>
-                                Relevés SMP
-                            </a>
-                        </li>
-                        
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}">
-                                <i class="fas fa-clipboard-list me-2"></i>
-                                Relevés LPZ
-                            </a>
-                        </li>
-                        
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}">
-                                <i class="fas fa-history me-2"></i>
-                                Historique
-                            </a>
-                        </li>
-                        
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}">
-                                <i class="fas fa-chart-line me-2"></i>
-                                Indicateurs
-                            </a>
-                        </li>
-                        
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}">
-                                <i class="fas fa-camera me-2"></i>
-                                Relevé du 20
-                            </a>
-                        </li>
-                        
-                        <li class="nav-item">
-                            <a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}">
-                                <i class="fas fa-tasks me-2"></i>
-                                Routines
-                            </a>
-                        </li>
-                        
-                        <li class="nav-item mt-4">
-                            <a class="nav-link" href="{{ url_for('logout') }}">
-                                <i class="fas fa-sign-out-alt me-2"></i>
-                                Déconnexion
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </nav>
-            
-            <!-- Main content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
-                <!-- Mobile menu button -->
-                <div class="d-md-none mt-3 mb-3">
-                    <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar">
-                        <i class="fas fa-bars"></i>
-                    </button>
-                </div>
-                
-                <!-- Flash messages -->
-                {% with messages = get_flashed_messages() %}
-                    {% if messages %}
-                        {% for message in messages %}
-                            <div class="alert alert-info alert-dismissible fade show" role="alert">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                {% endwith %}
-                
-                <!-- Page content -->
-                {% block content %}{% endblock %}
-            </main>
+<body>
+    <!-- Navbar mobile (affichée uniquement sur mobile) -->
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top d-lg-none">
+      <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
+          <span style="background: #fff; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(32,70,107,0.08);">
+            <img src="{{ url_for('static', filename='logo_flot.png') }}" alt="Logo Flot" style="width: 32px; height: 32px; object-fit: contain;">
+          </span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasNavbar" aria-labelledby="offcanvasNavbarLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="offcanvasNavbarLabel">Menu</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Fermer"></button>
+          </div>
+          <div class="offcanvas-body">
+            <div class="offcanvas-logo" style="background: #fff; border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem auto;">
+              <img src="{{ url_for('static', filename='logo_flot.png') }}" alt="Logo Flot" style="width: 38px; height: 38px; object-fit: contain;">
+            </div>
+            <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
+              {% set user = current_user %}
+              {% if user.is_authenticated and user.role == 'admin' %}
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés SMP</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés LPZ</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-users-cog me-2"></i>Utilisateurs</a></li>
+              {% else %}
+                  {% set accesses = user.page_accesses|selectattr('can_access')|map(attribute='page_name')|list %}
+                  {% if 'index' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>{% endif %}
+                  {% if 'releve_site_smp' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés SMP</a></li>{% endif %}
+                  {% if 'releve_site_lpz' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés LPZ</a></li>{% endif %}
+                  {% if 'historique' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>{% endif %}
+                  {% if 'indicateurs' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>{% endif %}
+                  {% if 'releve_20' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>{% endif %}
+                  {% if 'routines' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>{% endif %}
+              {% endif %}
+              <li class="nav-item mt-4"><a class="nav-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
+            </ul>
+          </div>
         </div>
+      </div>
+    </nav>
+    <!-- Sidebar PC/tablette (affichée uniquement à partir de lg) -->
+    <nav class="col-lg-2 d-none d-lg-block sidebar">
+        <div class="position-sticky pt-3">
+            <div class="sidebar-logo logo-bandeau">
+                <img src="{{ url_for('static', filename='logo_flot.png') }}" alt="Logo Flot">
+            </div>
+            <ul class="nav flex-column">
+                {% set user = current_user %}
+                {% if user.is_authenticated and user.role == 'admin' %}
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés SMP</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés LPZ</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-users-cog me-2"></i>Utilisateurs</a></li>
+                {% else %}
+                    {% set accesses = user.page_accesses|selectattr('can_access')|map(attribute='page_name')|list %}
+                    {% if 'index' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>{% endif %}
+                    {% if 'releve_site_smp' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés SMP</a></li>{% endif %}
+                    {% if 'releve_site_lpz' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés LPZ</a></li>{% endif %}
+                    {% if 'historique' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>{% endif %}
+                    {% if 'indicateurs' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>{% endif %}
+                    {% if 'releve_20' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>{% endif %}
+                    {% if 'routines' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>{% endif %}
+                {% endif %}
+                <li class="nav-item mt-4"><a class="nav-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
+            </ul>
+        </div>
+    </nav>
+    <!-- Espace pour éviter que le contenu soit caché sous la navbar mobile -->
+    <div class="d-lg-none" style="height: 70px;"></div>
+    <div class="main-content">
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-info alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <!-- Page content -->
+        {% block content %}{% endblock %}
     </div>
-    
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Custom JS -->
     <script>
         // Auto-hide alerts after 5 seconds
@@ -261,29 +283,7 @@
                 bsAlert.close();
             });
         }, 5000);
-        
-        // Mobile sidebar toggle
-        document.addEventListener('DOMContentLoaded', function() {
-            var sidebar = document.getElementById('sidebar');
-            var sidebarToggle = document.querySelector('[data-bs-toggle="collapse"]');
-            
-            if (sidebarToggle) {
-                sidebarToggle.addEventListener('click', function() {
-                    sidebar.classList.toggle('show');
-                });
-            }
-            
-            // Close sidebar when clicking outside on mobile
-            document.addEventListener('click', function(event) {
-                if (window.innerWidth <= 768) {
-                    if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
-                        sidebar.classList.remove('show');
-                    }
-                }
-            });
-        });
     </script>
-    
     {% block extra_js %}{% endblock %}
 </body>
 </html> 

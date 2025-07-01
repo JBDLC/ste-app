@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file, Response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file, Response, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,6 +17,8 @@ from fpdf import FPDF
 import matplotlib.pyplot as plt
 import io
 import tempfile
+from sqlalchemy.orm import relationship
+from functools import wraps
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'votre_cle_secrete_ici'
@@ -38,6 +40,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
     role = db.Column(db.String(20), default='operateur')  # operateur, chef_equipe, admin
+    page_accesses = relationship('UserPageAccess', back_populates='user', cascade='all, delete-orphan')
 
 class Site(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -111,6 +114,26 @@ def index():
     sites = Site.query.all()
     return render_template('index.html', sites=sites)
 
+# Fonction utilitaire pour trouver la première page autorisée
+PAGE_REDIRECTS = [
+    ('releve_site_smp', lambda: url_for('releve_site', site_id=1)),
+    ('releve_site_lpz', lambda: url_for('releve_site', site_id=2)),
+    ('historique', lambda: url_for('historique')),
+    ('indicateurs', lambda: url_for('indicateurs')),
+    ('releve_20', lambda: url_for('releve_20')),
+    ('routines', lambda: url_for('routines')),
+    ('utilisateurs', lambda: url_for('utilisateurs'))
+]
+
+def first_allowed_page(user):
+    if user.role == 'admin':
+        return url_for('index')
+    accesses = {a.page_name: a.can_access for a in user.page_accesses}
+    for page, url_func in PAGE_REDIRECTS:
+        if accesses.get(page):
+            return url_func()
+    return url_for('logout')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -120,7 +143,12 @@ def login():
         
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
-            return redirect(url_for('index'))
+            # Redirection selon les droits
+            accesses = {a.page_name: a.can_access for a in user.page_accesses}
+            if user.role == 'admin' or accesses.get('index'):
+                return redirect(url_for('index'))
+            else:
+                return redirect(first_allowed_page(user))
         else:
             flash('Nom d\'utilisateur ou mot de passe incorrect')
     
@@ -1705,6 +1733,127 @@ def init_db():
                 db.session.add(nouveau_formulaire)
         
         db.session.commit()
+
+# Liste des pages gérables pour les droits
+PAGE_NAMES = [
+    'index',
+    'releve_site_smp',
+    'releve_site_lpz',
+    'historique',
+    'indicateurs',
+    'releve_20',
+    'routines',
+    'utilisateurs'  # admin only
+]
+
+# Modèle pour les droits d'accès par page
+class UserPageAccess(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    page_name = db.Column(db.String(50), nullable=False)
+    can_access = db.Column(db.Boolean, default=False)
+    user = relationship('User', back_populates='page_accesses')
+
+User.page_accesses = relationship('UserPageAccess', back_populates='user', cascade='all, delete-orphan')
+
+# Décorateur pour vérifier l'accès à une page
+def require_page_access(page_name):
+    def decorator(f):
+        @wraps(f)
+        @login_required
+        def decorated_function(*args, **kwargs):
+            if current_user.role == 'admin':
+                # L'admin a toujours accès à tout
+                return f(*args, **kwargs)
+            access = next((a for a in current_user.page_accesses if a.page_name == page_name), None)
+            if access and access.can_access:
+                return f(*args, **kwargs)
+            abort(403)
+        return decorated_function
+    return decorator
+
+@app.route('/utilisateurs')
+@require_page_access('utilisateurs')
+def utilisateurs():
+    users = User.query.all()
+    page_names = PAGE_NAMES
+    return render_template('utilisateurs.html', users=users, page_names=page_names)
+
+@app.route('/api/utilisateurs', methods=['GET', 'POST'])
+@require_page_access('utilisateurs')
+def api_utilisateurs():
+    if request.method == 'GET':
+        users = User.query.all()
+        data = []
+        for user in users:
+            data.append({
+                'id': user.id,
+                'username': user.username,
+                'role': user.role,
+                'page_accesses': {a.page_name: a.can_access for a in user.page_accesses}
+            })
+        return jsonify(data)
+    elif request.method == 'POST':
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+        role = data.get('role', 'operateur')
+        if not username or not password:
+            return jsonify({'error': 'Champs manquants'}), 400
+        if User.query.filter_by(username=username).first():
+            return jsonify({'error': 'Nom d\'utilisateur déjà pris'}), 400
+        user = User(username=username, password_hash=generate_password_hash(password), role=role)
+        db.session.add(user)
+        db.session.commit()
+        # Initialiser les droits (admin a tout, autres rien)
+        for page in PAGE_NAMES:
+            access = UserPageAccess(user_id=user.id, page_name=page, can_access=(role == 'admin'))
+            db.session.add(access)
+        db.session.commit()
+        return jsonify({'success': True})
+
+@app.route('/api/utilisateurs/<int:user_id>', methods=['DELETE'])
+@require_page_access('utilisateurs')
+def api_supprimer_utilisateur(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.username == 'admin':
+        return jsonify({'error': 'Impossible de supprimer le compte admin'}), 403
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route('/api/utilisateurs/<int:user_id>/droits', methods=['PUT'])
+@require_page_access('utilisateurs')
+def api_modifier_droits(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.role == 'admin':
+        return jsonify({'error': 'Impossible de modifier les droits d\'un admin'}), 403
+    data = request.json
+    for page, can_access in data.items():
+        access = UserPageAccess.query.filter_by(user_id=user.id, page_name=page).first()
+        if access:
+            access.can_access = bool(can_access)
+    db.session.commit()
+
+@app.route('/api/utilisateurs/<int:user_id>', methods=['PUT'])
+@require_page_access('utilisateurs')
+def api_modifier_utilisateur(user_id):
+    user = User.query.get_or_404(user_id)
+    data = request.json
+    username = data.get('username')
+    role = data.get('role')
+    password = data.get('password')
+    if username:
+        # Vérifier unicité si changement
+        if username != user.username and User.query.filter_by(username=username).first():
+            return jsonify({'error': 'Nom d\'utilisateur déjà pris'}), 400
+        user.username = username
+    if role and user.role != 'admin':
+        user.role = role
+    if password:
+        user.password_hash = generate_password_hash(password)
+    db.session.commit()
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     init_db()
