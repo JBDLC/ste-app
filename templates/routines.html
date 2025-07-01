@@ -123,6 +123,44 @@
     .routines-row { flex-direction: column; }
     .routine-card { max-width: 100%; }
 }
+@media (max-width: 600px) {
+  .routines-row {
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .routine-card {
+    display: none !important;
+  }
+  .routine-line {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0.3rem 0.2rem;
+    margin-bottom: 0.2rem;
+    min-width: 0;
+    width: 100%;
+  }
+  .routine-line h6 {
+    font-size: 1rem;
+    font-weight: 500;
+    margin: 0;
+    text-align: left;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .routine-line .btn {
+    font-size: 0.95rem;
+    padding: 0.32rem 0.7rem;
+    border-radius: 6px;
+    margin-left: 10px;
+    flex-shrink: 0;
+  }
+}
 </style>
 
 <script>
@@ -150,16 +188,29 @@ function chargerFormulaires() {
             blocSMP.innerHTML = '<h4 class="mb-3 text-primary"><i class="fas fa-industry"></i> SMP</h4>';
             const rowSMP = document.createElement('div');
             rowSMP.className = 'routines-row';
+            const isMobile = window.innerWidth <= 600;
             ['STE PRINCIPALE', 'STE CAB', 'STEP'].forEach(type => {
                 formulaires.filter(f => f.nom.includes('SMP') && f.nom.includes(type)).forEach(formulaire => {
-                    const card = document.createElement('div');
-                    card.className = 'routine-card';
-                    card.innerHTML = `
-                        <h6>${formulaire.nom}</h6>
-                        <a href="/remplir_routine/${formulaire.id}" class="btn btn-primary btn-sm">
-                            <i class="fas fa-edit"></i> Remplir
-                        </a>
-                    `;
+                    let card;
+                    if (isMobile) {
+                        card = document.createElement('div');
+                        card.className = 'routine-line';
+                        card.innerHTML = `
+                            <h6>${formulaire.nom}</h6>
+                            <a href="/remplir_routine/${formulaire.id}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-edit"></i> Remplir
+                            </a>
+                        `;
+                    } else {
+                        card = document.createElement('div');
+                        card.className = 'routine-card';
+                        card.innerHTML = `
+                            <h6>${formulaire.nom}</h6>
+                            <a href="/remplir_routine/${formulaire.id}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-edit"></i> Remplir
+                            </a>
+                        `;
+                    }
                     rowSMP.appendChild(card);
                 });
             });
@@ -171,14 +222,26 @@ function chargerFormulaires() {
             rowLPZ.className = 'routines-row';
             ['STE PRINCIPALE', 'STE CAB', 'STEP'].forEach(type => {
                 formulaires.filter(f => f.nom.includes('LPZ') && f.nom.includes(type)).forEach(formulaire => {
-                    const card = document.createElement('div');
-                    card.className = 'routine-card';
-                    card.innerHTML = `
-                        <h6>${formulaire.nom}</h6>
-                        <a href="/remplir_routine/${formulaire.id}" class="btn btn-primary btn-sm">
-                            <i class="fas fa-edit"></i> Remplir
-                        </a>
-                    `;
+                    let card;
+                    if (isMobile) {
+                        card = document.createElement('div');
+                        card.className = 'routine-line';
+                        card.innerHTML = `
+                            <h6>${formulaire.nom}</h6>
+                            <a href="/remplir_routine/${formulaire.id}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-edit"></i> Remplir
+                            </a>
+                        `;
+                    } else {
+                        card = document.createElement('div');
+                        card.className = 'routine-card';
+                        card.innerHTML = `
+                            <h6>${formulaire.nom}</h6>
+                            <a href="/remplir_routine/${formulaire.id}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-edit"></i> Remplir
+                            </a>
+                        `;
+                    }
                     rowLPZ.appendChild(card);
                 });
             });
@@ -312,5 +375,11 @@ function exporterFormulaire() {
     }
     window.open(`/api/routines/export-excel/formulaire/${formulaireSelectionne}`, '_blank');
 }
+
+// Recharge dynamiquement les routines si la taille d'écran change (mobile <-> desktop)
+window.addEventListener('resize', function() {
+    // On recharge les routines si on change de mode mobile/desktop
+    if (formulaires.length > 0) chargerFormulaires();
+});
 </script>
 {% endblock %} 
