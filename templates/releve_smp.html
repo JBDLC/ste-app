@@ -86,9 +86,6 @@
                 <button type="button" class="btn btn-success me-2" onclick="sauvegarderTout()">Sauvegarder tout</button>
                 <button type="reset" class="btn btn-outline-secondary" onclick="reinitialiser()">Réinitialiser</button>
             </div>
-            <div>
-                <a href="{{ url_for('historique') }}" class="btn btn-link">Voir l'historique</a>
-            </div>
         </div>
     </form>
 </div>
@@ -98,6 +95,25 @@
 <script>
 let valeursVeille = {};
 let relevesExistants = {};
+let typeReleveMap = {};
+
+function chargerTypesReleve() {
+    fetch('/api/types_releve/1')
+        .then(r => r.json())
+        .then(data => {
+            typeReleveMap = {};
+            data.forEach(tr => {
+                typeReleveMap[tr.nom] = tr.id;
+            });
+            // Ajoute l'attribut data-type-id à chaque input
+            document.querySelectorAll('input[data-nom]').forEach(input => {
+                const nom = input.dataset.nom;
+                if (typeReleveMap[nom]) {
+                    input.dataset.typeId = typeReleveMap[nom];
+                }
+            });
+        });
+}
 
 function updateDateLettres() {
     const input = document.getElementById('dateReleve');
@@ -265,38 +281,30 @@ function sauvegarderTout() {
         alert('Veuillez sélectionner une date');
         return;
     }
-    
-    // Collecter toutes les valeurs
-    const releves = {};
-    document.querySelectorAll('.valeur-jour').forEach(input => {
-        const nom = input.dataset.nom;
+    const releves = [];
+    document.querySelectorAll('input[data-nom]').forEach(input => {
         const valeur = input.value.trim();
-        if (valeur !== '') {
-            releves[nom] = parseFloat(valeur);
+        const type_releve_id = input.dataset.typeId;
+        if (valeur !== '' && type_releve_id) {
+            releves.push({
+                type_releve_id: parseInt(type_releve_id),
+                valeur: parseFloat(valeur)
+            });
         }
     });
-    
-    if (Object.keys(releves).length === 0) {
+    if (releves.length === 0) {
         alert('Aucune valeur à sauvegarder');
         return;
     }
-    
-    // Envoyer les données
     fetch('/api/releves_smp', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            date: date,
-            releves: releves
-        })
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({date, releves})
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
             alert('Relevés sauvegardés avec succès !');
-            // Recharger les données pour mettre à jour l'état
             chargerDonneesDate();
         } else {
             alert('Erreur lors de la sauvegarde : ' + (data.error || 'Erreur inconnue'));
@@ -321,6 +329,7 @@ function reinitialiser() {
 
 // Événements
 document.addEventListener('DOMContentLoaded', function() {
+    chargerTypesReleve();
     const input = document.getElementById('dateReleve');
     if (!input.value) {
         const today = new Date();
