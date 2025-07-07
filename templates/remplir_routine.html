@@ -77,16 +77,6 @@
                         <label for="modal-commentaire" class="form-label">Commentaire :</label>
                         <textarea class="form-control" id="modal-commentaire" rows="3" placeholder="Ajouter un commentaire..."></textarea>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label for="modal-photo" class="form-label">Photo :</label>
-                        <input type="file" class="form-control" id="modal-photo" accept="image/*" capture="environment">
-                        <div class="form-text">Prendre une photo ou sélectionner un fichier</div>
-                    </div>
-                    
-                    <div id="modal-photo-preview" class="mb-3" style="display: none;">
-                        <img id="modal-photo-img" class="img-fluid rounded" style="max-height: 200px;">
-                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -293,17 +283,9 @@ function afficherQuestions() {
                         <h6 class="question-text mb-2">
                             <span class="badge bg-secondary me-2">${question.id_question}</span>
                             ${question.question}
-                            <span class="ms-2 icone-action" title="Commentaire" onclick="ouvrirCommentaire(${question.id})" style="cursor:pointer;vertical-align:middle;">
-                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path fill="#6c757d" d="M21 6.5a2.5 2.5 0 0 0-2.5-2.5h-13A2.5 2.5 0 0 0 3 6.5v7A2.5 2.5 0 0 0 5.5 16H7v3.09c0 .58.63.92 1.11.59l4.13-2.68H18.5A2.5 2.5 0 0 0 21 13.5v-7Zm-2.5-1A1.5 1.5 0 0 1 20 6.5v7a1.5 1.5 0 0 1-1.5 1.5H11.5a1 1 0 0 0-.56.17l-3.94 2.56V15.5a1 1 0 0 0-1-1H5.5A1.5 1.5 0 0 1 4 13.5v-7A1.5 1.5 0 0 1 5.5 5.5h13Z"/></svg>
-                            </span>
-                            <span class="ms-1 icone-action" title="Photo" onclick="ouvrirPhoto(${question.id})" style="cursor:pointer;vertical-align:middle;">
-                                <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path fill="#6c757d" d="M4 7V6a2 2 0 0 1 2-2h2.17a2 2 0 0 1 1.41.59l.83.83h2.18l.83-.83A2 2 0 0 1 15.83 4H18a2 2 0 0 1 2 2v1h1a1 1 0 0 1 1 1v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a1 1 0 0 1 1-1h1Zm0 2v9a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9H4Zm8 7a3 3 0 1 1 0-6 3 3 0 0 1 0 6Zm0-2a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>
-                            </span>
                         </h6>
                         ${reponse && reponse.commentaire ? 
                             `<small class="text-muted"><i class="fas fa-comment"></i> ${reponse.commentaire}</small>` : ''}
-                        ${reponse && reponse.photo_path ? 
-                            `<br><small class="text-info"><i class="fas fa-camera"></i> Photo prise</small>` : ''}
                     </div>
                     <div class="col-12 col-md-4 text-end d-flex flex-wrap justify-content-md-end gap-2 gap-md-1">
                         <div class="btn-group w-100 w-md-auto mb-2 mb-md-0" role="group">
@@ -357,29 +339,6 @@ function modifierReponse(questionId) {
     document.getElementById('modal-question-text').textContent = question.question;
     document.getElementById('modal-commentaire').value = reponse.commentaire || '';
     
-    // Afficher la photo existante si elle existe
-    const photoPreview = document.getElementById('modal-photo-preview');
-    const photoImg = document.getElementById('modal-photo-img');
-    if (reponse.photo_path) {
-        photoImg.src = `/uploads/${reponse.photo_path}`;
-        photoPreview.style.display = 'block';
-    } else {
-        photoPreview.style.display = 'none';
-    }
-    
-    // Gérer la prévisualisation de la nouvelle photo
-    document.getElementById('modal-photo').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                photoImg.src = e.target.result;
-                photoPreview.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-    
     const modal = new bootstrap.Modal(document.getElementById('detailModal'));
     modal.show();
 }
@@ -388,17 +347,25 @@ function sauvegarderReponse() {
     const questionId = document.getElementById('modal-question-id').value;
     const formulaireId = document.getElementById('modal-formulaire-id').value;
     const commentaire = document.getElementById('modal-commentaire').value;
-    const photoFile = document.getElementById('modal-photo').files[0];
     
     const formData = new FormData();
     formData.append('reponse', reponses[questionId].reponse);
     formData.append('commentaire', commentaire);
-    if (photoFile) {
-        formData.append('photo', photoFile);
-    }
     
-    fetch(`/api/routines/reponses/${reponses[questionId].id}`, {
-        method: 'PUT',
+    // Correction : POST si pas d'ID, PUT sinon
+    const repId = reponses[questionId] && reponses[questionId].id;
+    let url, method;
+    if (repId && repId !== 'undefined') {
+        url = `/api/routines/reponses/${repId}`;
+        method = 'PUT';
+    } else {
+        url = '/api/routines/reponses';
+        method = 'POST';
+        formData.append('formulaireId', formulaireId);
+        formData.append('questionId', questionId);
+    }
+    fetch(url, {
+        method: method,
         body: formData
     })
     .then(response => response.json())
@@ -421,50 +388,6 @@ function mettreAJourProgress() {
     const total = questions.length;
     const repondu = Object.keys(reponses).length;
     document.getElementById('progress-badge').textContent = `${repondu}/${total}`;
-}
-
-function ouvrirCommentaire(questionId) {
-    // Pré-remplir le modal pour le commentaire
-    const reponse = reponses[questionId];
-    const question = questions.find(q => q.id == questionId);
-    if (!question) return;
-    document.getElementById('modal-question-id').value = questionId;
-    document.getElementById('modal-formulaire-id').value = formulaireId;
-    document.getElementById('modal-question-text').textContent = question.question;
-    document.getElementById('modal-commentaire').focus();
-    if (reponse) {
-        document.getElementById('modal-commentaire').value = reponse.commentaire || '';
-    } else {
-        document.getElementById('modal-commentaire').value = '';
-    }
-    // Cacher la prévisualisation photo
-    document.getElementById('modal-photo-preview').style.display = 'none';
-    const modal = new bootstrap.Modal(document.getElementById('detailModal'));
-    modal.show();
-    setTimeout(() => document.getElementById('modal-commentaire').focus(), 300);
-}
-
-function ouvrirPhoto(questionId) {
-    // Pré-remplir le modal pour la photo
-    const reponse = reponses[questionId];
-    const question = questions.find(q => q.id == questionId);
-    if (!question) return;
-    document.getElementById('modal-question-id').value = questionId;
-    document.getElementById('modal-formulaire-id').value = formulaireId;
-    document.getElementById('modal-question-text').textContent = question.question;
-    document.getElementById('modal-commentaire').value = reponse ? reponse.commentaire || '' : '';
-    // Afficher la prévisualisation photo si existante
-    const photoPreview = document.getElementById('modal-photo-preview');
-    const photoImg = document.getElementById('modal-photo-img');
-    if (reponse && reponse.photo_path) {
-        photoImg.src = `/uploads/${reponse.photo_path}`;
-        photoPreview.style.display = 'block';
-    } else {
-        photoPreview.style.display = 'none';
-    }
-    const modal = new bootstrap.Modal(document.getElementById('detailModal'));
-    modal.show();
-    setTimeout(() => document.getElementById('modal-photo').click(), 300);
 }
 
 function enregistrerToutesReponses() {

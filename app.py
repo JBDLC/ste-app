@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file, Response, abort
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_file, Response, abort, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -19,10 +19,37 @@ import io
 import tempfile
 from sqlalchemy.orm import relationship
 from functools import wraps
+import shutil
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import zipfile
+from threading import Thread
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'votre_cle_secrete_ici'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ste_releve.db'
+
+# Configuration de la base de données pour Render
+if os.environ.get('DATABASE_URL'):
+    # Utiliser la variable d'environnement PostgreSQL de Render
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url and database_url.startswith('postgres://'):
+        # Render utilise postgres:// mais SQLAlchemy attend postgresql://
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    print(f"Configuration PostgreSQL détectée: {database_url[:50] if database_url else 'None'}...")
+elif os.environ.get('RENDER'):
+    # Sur Render, utiliser un chemin persistant pour SQLite
+    db_path = '/opt/render/project/src/ste_releve.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    print(f"Configuration SQLite Render: {db_path}")
+else:
+    # En local, utiliser le chemin relatif
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ste_releve.db'
+    print("Configuration SQLite locale")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
@@ -97,7 +124,6 @@ class ReponseRoutine(db.Model):
     question_id = db.Column(db.Integer, db.ForeignKey('question_routine.id'), nullable=False)
     reponse = db.Column(db.String(20), nullable=False)  # 'Fait', 'Non Fait', 'Non Applicable'
     commentaire = db.Column(db.Text)
-    photo_path = db.Column(db.String(200))
     date_creation = db.Column(db.Date, default=datetime.utcnow().date)
     heure_creation = db.Column(db.Time, default=datetime.utcnow().time)
     utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -111,8 +137,59 @@ def load_user(user_id):
 @app.route('/')
 @login_required
 def index():
-    sites = Site.query.all()
-    return render_template('index.html', sites=sites)
+    today = datetime.now().date()
+    # Statut relevés (join avec TypeReleve)
+    smp_fait = db.session.query(Releve).join(TypeReleve).filter(TypeReleve.site_id == 1, Releve.date == today).count() > 0
+    lpz_fait = db.session.query(Releve).join(TypeReleve).filter(TypeReleve.site_id == 2, Releve.date == today).count() > 0
+    releves_status = {
+        'SMP': smp_fait,
+        'LPZ': lpz_fait
+    }
+    # Calcul régularité relevés
+    releves_regularite = {}
+    for nom, site_id in [('SMP', 1), ('LPZ', 2)]:
+        type_releves = TypeReleve.query.filter_by(site_id=site_id).all()
+        # On considère qu'un relevé est "fait" si au moins un relevé existe ce jour-là pour ce site
+        # Trouver la première date de relevé pour ce site (hors reset)
+        reset = RESET_REGULARITE.get(('releve', f'Relevé {nom}'))
+        first = db.session.query(Releve.date).join(TypeReleve).filter(TypeReleve.site_id == site_id)
+        if reset:
+            first = first.filter(Releve.date >= reset)
+        first = first.order_by(Releve.date.asc()).first()
+        if first:
+            date_debut = first[0]
+            jours = (today - date_debut).days + 1
+            total = db.session.query(Releve.date).join(TypeReleve).filter(TypeReleve.site_id == site_id, Releve.date >= date_debut).distinct().count()
+            regularite = int(100 * total / jours) if jours > 0 else 0
+        else:
+            regularite = 0
+        releves_regularite[nom] = regularite
+    # Routines fixes
+    routines_list = [
+        'STE PRINCIPALE SMP', 'STE CAB SMP', 'STEP SMP',
+        'STE PRINCIPALE LPZ', 'STE CAB LPZ', 'STEP LPZ'
+    ]
+    routines_status = {}
+    routines_regularite = {}
+    for nom in routines_list:
+        formulaire = FormulaireRoutine.query.filter_by(nom=nom).first()
+        fait = False
+        regularite = 0
+        if formulaire:
+            fait = db.session.query(ReponseRoutine).filter(ReponseRoutine.formulaire_id == formulaire.id, ReponseRoutine.date_creation == today).count() > 0
+            reset = RESET_REGULARITE.get(('routine', nom))
+            first = db.session.query(ReponseRoutine.date_creation).filter(ReponseRoutine.formulaire_id == formulaire.id)
+            if reset:
+                first = first.filter(ReponseRoutine.date_creation >= reset)
+            first = first.order_by(ReponseRoutine.date_creation.asc()).first()
+            if first:
+                date_debut = first[0]
+                jours = (today - date_debut).days + 1
+                total = db.session.query(ReponseRoutine.date_creation).filter(ReponseRoutine.formulaire_id == formulaire.id, ReponseRoutine.date_creation >= date_debut).distinct().count()
+                regularite = int(100 * total / jours) if jours > 0 else 0
+        routines_status[nom] = fait
+        routines_regularite[nom] = regularite
+    return render_template('index.html', releves_status=releves_status, releves_regularite=releves_regularite, routines_list=routines_list, routines_status=routines_status, routines_regularite=routines_regularite, user_role=current_user.role)
 
 # Fonction utilitaire pour trouver la première page autorisée
 PAGE_REDIRECTS = [
@@ -204,6 +281,7 @@ def ajouter_releve():
             releve.utilisateur_id = current_user.id
             db.session.commit()
             print(f"DEBUG /api/releve - Relevé mis à jour avec succès")
+            backup_database()  # Sauvegarde automatique après modification
             return jsonify({'success': True})
         else:
             print(f"DEBUG /api/releve - Relevé non trouvé pour ID: {data['id']}")
@@ -227,6 +305,7 @@ def ajouter_releve():
         )
         db.session.add(nouveau_releve)
     db.session.commit()
+    backup_database()  # Sauvegarde automatique après création/modification
     return jsonify({'success': True})
 
 @app.route('/historique')
@@ -760,6 +839,7 @@ def api_releves_smp() -> Union[Response, Tuple[Response, int]]:
                 db.session.add(nouveau_releve)
         try:
             db.session.commit()
+            backup_database()  # Sauvegarde automatique après sauvegarde SMP
             return jsonify({'success': True})
         except Exception as e:
             db.session.rollback()
@@ -842,6 +922,7 @@ def api_releves_lpz() -> Union[Response, Tuple[Response, int]]:
                 db.session.add(nouveau_releve)
         try:
             db.session.commit()
+            backup_database()  # Sauvegarde automatique après sauvegarde LPZ
             return jsonify({'success': True})
         except Exception as e:
             db.session.rollback()
@@ -1211,18 +1292,18 @@ def api_import_excel():
                 
                 if question_existante:
                     # Mettre à jour
-                    question_existante.lieu = row['lieu']
-                    question_existante.question = row['question']
-                    question_existante.ordre = index + 1
+                    question_existante.lieu = str(row['lieu'])
+                    question_existante.question = str(row['question'])
+                    question_existante.ordre = int(str(index)) + 1
                     updated_count += 1
                 else:
                     # Créer nouvelle question
                     nouvelle_question = QuestionRoutine(
                         formulaire_id=formulaire_id,
                         id_question=id_question,
-                        lieu=row['lieu'],
-                        question=row['question'],
-                        ordre=index + 1
+                        lieu=str(row['lieu']),
+                        question=str(row['question']),
+                        ordre=int(str(index)) + 1
                     )
                     db.session.add(nouvelle_question)
                     inserted_count += 1
@@ -1250,22 +1331,12 @@ def api_sauvegarder_reponse():
     if not all([formulaire_id, question_id, reponse]):
         return jsonify({'error': 'Données manquantes'}), 400
     
-    # Gérer l'upload de photo
-    photo_path = None
-    if 'photo' in request.files:
-        file = request.files['photo']
-        if file and file.filename:
-            filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}")
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            photo_path = filename
-    
     # Créer la réponse
     nouvelle_reponse = ReponseRoutine(
         formulaire_id=formulaire_id,
         question_id=question_id,
         reponse=reponse,
         commentaire=commentaire,
-        photo_path=photo_path,
         utilisateur_id=current_user.id
     )
     
@@ -1305,7 +1376,6 @@ def api_reponses_date(date):
             'question': question.question,
             'reponse': reponse.reponse,
             'commentaire': reponse.commentaire,
-            'photo_path': reponse.photo_path,
             'date_creation': reponse.date_creation.isoformat(),
             'heure_creation': reponse.heure_creation.isoformat() if reponse.heure_creation else None
         })
@@ -1318,23 +1388,13 @@ def api_modifier_reponse(reponse_id):
     reponse = ReponseRoutine.query.get(reponse_id)
     if not reponse:
         return jsonify({'error': 'Réponse non trouvée'}), 404
-    
     # Vérifier que la réponse date d'aujourd'hui
     if reponse.date_creation != datetime.now().date():
         return jsonify({'error': 'Modification non autorisée'}), 403
-    
     data = request.form.to_dict()
     reponse.reponse = data.get('reponse', reponse.reponse)
     reponse.commentaire = data.get('commentaire', reponse.commentaire)
-    
-    # Gérer l'upload de nouvelle photo
-    if 'photo' in request.files:
-        file = request.files['photo']
-        if file and file.filename:
-            filename = secure_filename(f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}")
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            reponse.photo_path = filename
-    
+    reponse.utilisateur_id = current_user.id
     db.session.commit()
     return jsonify({'message': 'Réponse modifiée'})
 
@@ -1543,7 +1603,6 @@ def api_export_excel_formulaire(formulaire_id):
             'Réponse': reponse.reponse,
             'Commentaire': reponse.commentaire or '',
             'Utilisateur': reponse.utilisateur_id,
-            'Photo': reponse.photo_path or ''
         })
 
     df = pd.DataFrame(data)
@@ -1566,6 +1625,21 @@ def api_formulaires_remplis_aujourdhui():
     today = datetime.now().date()
     count = db.session.query(ReponseRoutine.formulaire_id).filter(ReponseRoutine.date_creation == today).distinct().count()
     return jsonify({'formulaires_remplis': count})
+
+@app.route('/api/routines/reponses/<int:formulaire_id>/<date>', methods=['DELETE'])
+@login_required
+def api_supprimer_routine_journee(formulaire_id, date):
+    try:
+        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Format de date invalide'}), 400
+    reponses = ReponseRoutine.query.filter_by(formulaire_id=formulaire_id, date_creation=date_obj).all()
+    if not reponses:
+        return jsonify({'error': 'Aucune réponse à supprimer'}), 404
+    for rep in reponses:
+        db.session.delete(rep)
+    db.session.commit()
+    return jsonify({'success': True})
 
 # Initialisation de la base de données
 def init_db():
@@ -1715,6 +1789,17 @@ def init_db():
         
         db.session.commit()
 
+        # Créer la configuration email par défaut
+        email_config = EmailConfig.query.first()
+        if not email_config:
+            email_config = EmailConfig(
+                email_address='admin@ste-releve.com',
+                smtp_server='smtp.gmail.com',
+                smtp_port=587
+            )
+            db.session.add(email_config)
+            db.session.commit()
+
 # Liste des pages gérables pour les droits
 PAGE_NAMES = [
     'index',
@@ -1775,7 +1860,9 @@ def api_utilisateurs():
             })
         return jsonify(data)
     elif request.method == 'POST':
-        data = request.json
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Données JSON manquantes'}), 400
         username = data.get('username')
         password = data.get('password')
         role = data.get('role', 'operateur')
@@ -1783,7 +1870,10 @@ def api_utilisateurs():
             return jsonify({'error': 'Champs manquants'}), 400
         if User.query.filter_by(username=username).first():
             return jsonify({'error': 'Nom d\'utilisateur déjà pris'}), 400
-        user = User(username=username, password_hash=generate_password_hash(password), role=role)
+        user = User()
+        user.username = username
+        user.password_hash = generate_password_hash(password)
+        user.role = role
         db.session.add(user)
         db.session.commit()
         # Initialiser les droits (admin a tout, autres rien)
@@ -1809,18 +1899,23 @@ def api_modifier_droits(user_id):
     user = User.query.get_or_404(user_id)
     if user.role == 'admin':
         return jsonify({'error': 'Impossible de modifier les droits d\'un admin'}), 403
-    data = request.json
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Données JSON manquantes'}), 400
     for page, can_access in data.items():
         access = UserPageAccess.query.filter_by(user_id=user.id, page_name=page).first()
         if access:
             access.can_access = bool(can_access)
     db.session.commit()
+    return jsonify({'success': True})
 
 @app.route('/api/utilisateurs/<int:user_id>', methods=['PUT'])
 @require_page_access('utilisateurs')
 def api_modifier_utilisateur(user_id):
     user = User.query.get_or_404(user_id)
-    data = request.json
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Données JSON manquantes'}), 400
     username = data.get('username')
     role = data.get('role')
     password = data.get('password')
@@ -1834,6 +1929,518 @@ def api_modifier_utilisateur(user_id):
     if password:
         user.password_hash = generate_password_hash(password)
     db.session.commit()
+    return jsonify({'success': True})
+
+# Fonction de sauvegarde automatique de la base de données
+def backup_database():
+    """Sauvegarde automatique de la base de données"""
+    try:
+        db_path = 'instance/ste_releve.db'
+        if os.path.exists(db_path):
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_path = f'instance/backup_ste_releve_{timestamp}.db'
+            shutil.copy2(db_path, backup_path)
+            print(f"Sauvegarde automatique créée: {backup_path}")
+            
+            # Garder seulement les 5 dernières sauvegardes
+            backup_dir = 'instance'
+            backup_files = [f for f in os.listdir(backup_dir) if f.startswith('backup_ste_releve_') and f.endswith('.db')]
+            backup_files.sort(reverse=True)
+            
+            for old_backup in backup_files[5:]:  # Garder seulement les 5 plus récentes
+                try:
+                    os.remove(os.path.join(backup_dir, old_backup))
+                    print(f"Ancienne sauvegarde supprimée: {old_backup}")
+                except Exception as e:
+                    print(f"Erreur lors de la suppression de {old_backup}: {e}")
+    except Exception as e:
+        print(f"Erreur lors de la sauvegarde automatique: {e}")
+
+# Fonction de nettoyage automatique de la base de données
+def cleanup_old_data():
+    """Nettoie automatiquement les anciennes données pour économiser l'espace"""
+    try:
+        with app.app_context():
+            # Supprimer les photos de plus de 2 ans
+            two_years_ago = datetime.now().date() - timedelta(days=730)
+            old_photos = PhotoReleve.query.filter(PhotoReleve.date < two_years_ago).all()
+            
+            for photo in old_photos:
+                # Supprimer le fichier physique
+                try:
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo.fichier_photo)
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                except Exception as e:
+                    print(f"Erreur suppression fichier {photo.fichier_photo}: {e}")
+            
+            # Supprimer les enregistrements de la base
+            PhotoReleve.query.filter(PhotoReleve.date < two_years_ago).delete()
+            
+            # Supprimer les relevés de plus de 5 ans
+            five_years_ago = datetime.now().date() - timedelta(days=1825)
+            Releve.query.filter(Releve.date < five_years_ago).delete()
+            
+            # Supprimer les réponses de routine de plus de 3 ans
+            three_years_ago = datetime.now().date() - timedelta(days=1095)
+            ReponseRoutine.query.filter(ReponseRoutine.date_creation < three_years_ago).delete()
+            
+            db.session.commit()
+            
+            print(f"Nettoyage automatique effectué : {len(old_photos)} photos supprimées")
+            return True
+            
+    except Exception as e:
+        print(f"Erreur lors du nettoyage automatique: {e}")
+        return False
+
+# Fonction pour vérifier l'espace utilisé
+def check_database_size():
+    """Vérifie la taille de la base de données"""
+    try:
+        with app.app_context():
+            # Compter les enregistrements
+            nb_releves = Releve.query.count()
+            nb_photos = PhotoReleve.query.count()
+            nb_routines = ReponseRoutine.query.count()
+            
+            # Estimation de la taille (approximative)
+            estimated_size_mb = (nb_releves * 0.001) + (nb_photos * 2) + (nb_routines * 0.001)
+            
+            print(f"📊 Taille estimée de la base : {estimated_size_mb:.2f} MB")
+            print(f"   - {nb_releves} relevés")
+            print(f"   - {nb_photos} photos")
+            print(f"   - {nb_routines} réponses de routine")
+            
+            # Déclencher le nettoyage automatique si > 800MB
+            if estimated_size_mb > 800:
+                print("⚠️ ATTENTION : Base de données proche de la limite (1GB)")
+                print("🔄 Déclenchement du nettoyage automatique avec envoi de rapports...")
+                
+                # Lancer le nettoyage en arrière-plan
+                def background_cleanup():
+                    with app.app_context():
+                        cleanup_and_send_reports()
+                
+                cleanup_thread = Thread(target=background_cleanup)
+                cleanup_thread.daemon = True
+                cleanup_thread.start()
+                
+                print("✅ Nettoyage automatique lancé en arrière-plan")
+            
+            return estimated_size_mb
+            
+    except Exception as e:
+        print(f"Erreur lors de la vérification de la taille: {e}")
+        return 0
+
+@app.route('/api/database/status')
+@login_required
+def api_database_status():
+    """Retourne le statut de la base de données"""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    try:
+        # Compter les enregistrements
+        nb_releves = Releve.query.count()
+        nb_photos = PhotoReleve.query.count()
+        nb_routines = ReponseRoutine.query.count()
+        nb_users = User.query.count()
+        
+        # Estimation de la taille
+        estimated_size_mb = (nb_releves * 0.001) + (nb_photos * 2) + (nb_routines * 0.001)
+        
+        # Statut de l'espace
+        if estimated_size_mb > 900:
+            status = 'critical'
+            message = 'Base de données presque pleine ! Upgrade recommandé.'
+        elif estimated_size_mb > 800:
+            status = 'warning'
+            message = 'Base de données proche de la limite.'
+        else:
+            status = 'ok'
+            message = 'Espace suffisant.'
+        
+        return jsonify({
+            'status': status,
+            'message': message,
+            'estimated_size_mb': round(estimated_size_mb, 2),
+            'usage_percent': round((estimated_size_mb / 1024) * 100, 1),
+            'stats': {
+                'releves': nb_releves,
+                'photos': nb_photos,
+                'routines': nb_routines,
+                'users': nb_users
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/database/cleanup', methods=['POST'])
+@login_required
+def api_database_cleanup():
+    """Lance un nettoyage automatique de la base de données"""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    try:
+        success = cleanup_and_send_reports()
+        if success:
+            return jsonify({'message': 'Nettoyage effectué avec succès'})
+        else:
+            return jsonify({'error': 'Erreur lors du nettoyage'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/email/config', methods=['GET', 'PUT'])
+@login_required
+def api_email_config():
+    """Gère la configuration email"""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if request.method == 'GET':
+        config = get_email_config()
+        return jsonify({
+            'email_address': config.email_address,
+            'smtp_server': config.smtp_server,
+            'smtp_port': config.smtp_port,
+            'smtp_username': config.smtp_username,
+            'smtp_password': '***' if config.smtp_password else ''
+        })
+    
+    elif request.method == 'PUT':
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Données JSON manquantes'}), 400
+        config = get_email_config()
+        
+        if 'email_address' in data:
+            config.email_address = data['email_address']
+        if 'smtp_server' in data:
+            config.smtp_server = data['smtp_server']
+        if 'smtp_port' in data:
+            config.smtp_port = data['smtp_port']
+        if 'smtp_username' in data:
+            config.smtp_username = data['smtp_username']
+        if 'smtp_password' in data and data['smtp_password'] != '***':
+            config.smtp_password = data['smtp_password']
+        
+        db.session.commit()
+        return jsonify({'message': 'Configuration email mise à jour'})
+
+@app.route('/api/email/test', methods=['POST'])
+@login_required
+def api_test_email():
+    """Teste la configuration email"""
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    try:
+        config = get_email_config()
+        if not config.email_address:
+            return jsonify({'error': 'Aucune adresse email configurée'}), 400
+        
+        # Créer un email de test
+        subject = "Test Configuration Email - STE Relevé"
+        body = f"""
+        <h2>Test de configuration email</h2>
+        <p>Cet email confirme que la configuration email fonctionne correctement.</p>
+        <p><strong>Date:</strong> {datetime.now().strftime('%d/%m/%Y à %H:%M')}</p>
+        <p><strong>Serveur SMTP:</strong> {config.smtp_server}:{config.smtp_port}</p>
+        """
+        
+        success = send_email_with_attachments(subject, body, [], config.email_address)
+        
+        if success:
+            return jsonify({'message': 'Email de test envoyé avec succès'})
+        else:
+            return jsonify({'error': 'Erreur lors de l\'envoi de l\'email de test'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Modèle pour la configuration email
+class EmailConfig(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email_address = db.Column(db.String(200), nullable=False, default='admin@ste-releve.com')
+    smtp_server = db.Column(db.String(100), default='smtp.gmail.com')
+    smtp_port = db.Column(db.Integer, default=587)
+    smtp_username = db.Column(db.String(200))
+    smtp_password = db.Column(db.String(200))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# Fonctions d'envoi d'email
+def get_email_config():
+    """Récupère la configuration email"""
+    config = EmailConfig.query.first()
+    if not config:
+        config = EmailConfig()
+        db.session.add(config)
+        db.session.commit()
+    return config
+
+def send_email_with_attachments(subject, body, attachments, recipient_email):
+    """Envoie un email avec pièces jointes (ZIP/PDF/images)"""
+    try:
+        config = get_email_config()
+        
+        # Créer le message
+        msg = MIMEMultipart()
+        msg['From'] = config.smtp_username or 'noreply@ste-releve.com'
+        msg['To'] = recipient_email
+        msg['Subject'] = subject
+        
+        # Corps du message
+        msg.attach(MIMEText(body, 'html'))
+        
+        # Ajouter les pièces jointes avec le bon type MIME
+        for attachment in attachments:
+            with open(attachment['path'], 'rb') as f:
+                filename = attachment['filename']
+                if filename.lower().endswith('.zip'):
+                    part = MIMEBase('application', 'zip')
+                elif filename.lower().endswith('.pdf'):
+                    part = MIMEBase('application', 'pdf')
+                elif filename.lower().endswith('.jpg') or filename.lower().endswith('.jpeg'):
+                    part = MIMEBase('image', 'jpeg')
+                elif filename.lower().endswith('.png'):
+                    part = MIMEBase('image', 'png')
+                else:
+                    part = MIMEBase('application', 'octet-stream')
+                part.set_payload(f.read())
+                encoders.encode_base64(part)
+                part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
+                msg.attach(part)
+        
+        # Envoyer l'email
+        if config.smtp_username and config.smtp_password:
+            server = smtplib.SMTP(config.smtp_server, config.smtp_port)
+            server.starttls()
+            server.login(config.smtp_username, config.smtp_password)
+            server.send_message(msg)
+            server.quit()
+            print(f"Email envoyé avec succès à {recipient_email}")
+            return True
+        else:
+            print("Configuration SMTP manquante")
+            return False
+            
+    except Exception as e:
+        print(f"Erreur lors de l'envoi d'email: {e}")
+        return False
+
+def create_releve_20_zip(session_id):
+    """Crée un fichier ZIP avec toutes les photos d'un relevé du 20 (toujours, même s'il n'y en a qu'une)"""
+    try:
+        photos = PhotoReleve.query.filter_by(session_id=session_id).all()
+        if not photos:
+            return None
+        
+        # Créer le ZIP
+        zip_filename = f"releve_20_{session_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
+        
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for photo in photos:
+                photo_path = os.path.join(app.config['UPLOAD_FOLDER'], photo.fichier_photo)
+                if os.path.exists(photo_path):
+                    # Nom du fichier dans le ZIP : nom_debitmetre/nom_photo.jpg
+                    arcname = f"{photo.nom_debitmetre}/{photo.fichier_photo}"
+                    zipf.write(photo_path, arcname)
+        
+        # Vérification du contenu du ZIP (debug)
+        with zipfile.ZipFile(zip_path, 'r') as zipf:
+            print(f"Contenu du ZIP {zip_filename} : {zipf.namelist()}")
+        
+        return {
+            'path': zip_path,
+            'filename': zip_filename,
+            'photos_count': len(photos)
+        }
+    except Exception as e:
+        print(f"Erreur création ZIP relevé 20: {e}")
+        return None
+
+def cleanup_and_send_reports():
+    try:
+        config = get_email_config()
+        if not config.email_address:
+            print("Aucune adresse email configurée")
+            return False
+        print("🔄 Début du nettoyage automatique avec envoi de rapports...")
+        # 1. Envoyer les relevés du 20 (inchangé)
+        sessions_photos = db.session.query(PhotoReleve.session_id).distinct().all()
+        for (session_id,) in sessions_photos:
+            zip_file = create_releve_20_zip(session_id)
+            if zip_file:
+                first_photo = PhotoReleve.query.filter_by(session_id=session_id).first()
+                if first_photo:
+                    site = Site.query.get(first_photo.site_id)
+                    user = User.query.get(first_photo.utilisateur_id)
+                    subject = f"Relevé du 20 - {site.nom if site else 'Site'} - {first_photo.date.strftime('%d/%m/%Y')}"
+                    body = f"""
+                    <h2>Relevé du 20 - {site.nom if site else 'Site'}</h2>
+                    <p><strong>Date:</strong> {first_photo.date.strftime('%d/%m/%Y')}</p>
+                    <p><strong>Utilisateur:</strong> {user.username if user else 'Inconnu'}</p>
+                    <p><strong>Nombre de photos:</strong> {zip_file['photos_count']}</p>
+                    <p>Ce fichier ZIP contient toutes les photos du relevé organisées par débitmètre.</p>
+                    """
+                    print(f"[CLEANUP] Envoi mail relevé 20: {subject}")
+                    success = send_email_with_attachments(subject, body, [zip_file], config.email_address)
+                    if success:
+                        print(f"[CLEANUP] Mail relevé 20 envoyé, suppression des photos...")
+                        photos_to_delete = PhotoReleve.query.filter_by(session_id=session_id).all()
+                        for photo in photos_to_delete:
+                            try:
+                                file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo.fichier_photo)
+                                if os.path.exists(file_path):
+                                    os.remove(file_path)
+                            except Exception as e:
+                                print(f"Erreur suppression fichier {photo.fichier_photo}: {e}")
+                        PhotoReleve.query.filter_by(session_id=session_id).delete()
+                        print(f"✅ Relevé 20 {session_id} envoyé et supprimé")
+                    try:
+                        os.remove(zip_file['path'])
+                    except:
+                        pass
+        # 2. Générer tous les PDF routines par formulaire rempli
+        pdfs = create_routine_pdfs_by_formulaire()
+        if pdfs:
+            subject = f"Rapports Routines STE avec Photos - {datetime.now().strftime('%d/%m/%Y')}"
+            body = f"""
+            <h2>Rapports Routines STE avec Photos</h2>
+            <p><strong>Date de génération:</strong> {datetime.now().strftime('%d/%m/%Y à %H:%M')}</p>
+            <p>Un PDF par formulaire rempli est joint à ce mail.</p>
+            """
+            print(f"[CLEANUP] Envoi mail routines avec {len(pdfs)} PDF en PJ...")
+            success = send_email_with_attachments(subject, body, pdfs, config.email_address)
+            if success:
+                print(f"[CLEANUP] Mail routines envoyé, suppression des photos routines...")
+        else:
+            print("[CLEANUP] Aucun PDF routine à envoyer, mais suppression des photos routines quand même...")
+        # Supprimer toutes les photos des routines (fichiers + champ photo_path) dans tous les cas
+        routines_photos = ReponseRoutine.query.filter(ReponseRoutine.photo_path.isnot(None)).all()
+        for rep in routines_photos:
+            if rep.photo_path:
+                try:
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], rep.photo_path)
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        print(f"[CLEANUP] Photo routine supprimée: {file_path}")
+                except Exception as e:
+                    print(f"Erreur suppression photo routine {rep.photo_path}: {e}")
+            rep.photo_path = None
+        print("✅ Toutes les photos des routines supprimées, réponses conservées")
+        # Nettoyer les PDF temporaires
+        for pdf in pdfs:
+            try:
+                os.remove(pdf['path'])
+                print(f"[CLEANUP] PDF temporaire supprimé: {pdf['path']}")
+            except:
+                pass
+        db.session.commit()
+        print("✅ Nettoyage automatique terminé avec succès")
+        return True
+    except Exception as e:
+        print(f"❌ Erreur lors du nettoyage automatique: {e}")
+        db.session.rollback()
+        return False
+
+@app.route('/api/accueil/synthese')
+@login_required
+def api_accueil_synthese():
+    today = datetime.now().date()
+    # Relevé SMP
+    smp_fait = db.session.query(Releve).filter(Releve.site == 'SMP', Releve.date == today).count() > 0
+    # Relevé LPZ
+    lpz_fait = db.session.query(Releve).filter(Releve.site == 'LPZ', Releve.date == today).count() > 0
+    # Routines (tous les formulaires)
+    routines = []
+    formulaires = FormulaireRoutine.query.order_by(FormulaireRoutine.nom).all()
+    for f in formulaires:
+        fait = db.session.query(ReponseRoutine).filter(ReponseRoutine.formulaire_id == f.id, ReponseRoutine.date_creation == today).count() > 0
+        routines.append({'nom': f.nom, 'fait': fait})
+    return jsonify({'smp': smp_fait, 'lpz': lpz_fait, 'routines': routines})
+
+@app.route('/api/accueil/exhaure')
+@login_required
+def api_accueil_exhaure():
+    today = datetime.now().date()
+    # On suppose que le type de relevé exhaure est 'Exhaure' et qu'il y a un champ valeur, site
+    sites = ['SMP', 'LPZ']
+    result = []
+    for site in sites:
+        total = db.session.query(func.sum(Releve.valeur)).filter(Releve.site == site, Releve.type == 'Exhaure', Releve.date == today).scalar() or 0
+        piscines = round(total / 2500, 2)
+        result.append({'nom': site, 'm3': int(total), 'piscines': piscines})
+    return jsonify(result)
+
+# Stockage simple des dates de reset régularité (en mémoire, à remplacer par table si besoin)
+RESET_REGULARITE = {}
+
+@app.route('/api/accueil/synthese_v2')
+@login_required
+def api_accueil_synthese_v2():
+    today = datetime.now().date()
+    # Relevés fixes
+    releves = []
+    for nom in ['Relevé SMP', 'Relevé LPZ']:
+        site = 'SMP' if 'SMP' in nom else 'LPZ'
+        fait = db.session.query(Releve).filter(Releve.site == site, Releve.date == today).count() > 0
+        # Calcul régularité sur 30 jours (hors reset)
+        reset = RESET_REGULARITE.get(('releve', nom))
+        date_debut = reset if reset else (today - timedelta(days=29))
+        total = db.session.query(Releve.date).filter(Releve.site == site, Releve.date >= date_debut).distinct().count()
+        jours = (today - date_debut).days + 1
+        regularite = int(100 * total / jours) if jours > 0 else 0
+        releves.append({'nom': nom, 'fait': fait, 'regularite': regularite})
+    # Routines fixes
+    routines_noms = [
+        'STE PRINCIPALE SMP', 'STE CAB SMP', 'STEP SMP',
+        'STE PRINCIPALE LPZ', 'STE CAB LPZ', 'STEP LPZ'
+    ]
+    routines = []
+    for nom in routines_noms:
+        formulaire = FormulaireRoutine.query.filter_by(nom=nom).first()
+        fait = False
+        regularite = 0
+        if formulaire:
+            fait = db.session.query(ReponseRoutine).filter(ReponseRoutine.formulaire_id == formulaire.id, ReponseRoutine.date_creation == today).count() > 0
+            reset = RESET_REGULARITE.get(('routine', nom))
+            date_debut = reset if reset else (today - timedelta(days=29))
+            jours = (today - date_debut).days + 1
+            total = db.session.query(ReponseRoutine.date_creation).filter(ReponseRoutine.formulaire_id == formulaire.id, ReponseRoutine.date_creation >= date_debut).distinct().count()
+            regularite = int(100 * total / jours) if jours > 0 else 0
+        routines.append({'nom': nom, 'fait': fait, 'regularite': regularite})
+    return jsonify({'releves': releves, 'routines': routines})
+
+@app.route('/api/accueil/exhaure_v2')
+@login_required
+def api_accueil_exhaure_v2():
+    today = datetime.now().date()
+    sites = ['SMP', 'LPZ']
+    result = []
+    for site in sites:
+        total = 0
+        for type_ in ['Exhaure', 'Bassin d\'orage', 'Retour dessableur']:
+            total += db.session.query(func.sum(Releve.valeur)).filter(Releve.site == site, Releve.type == type_, Releve.date == today).scalar() or 0
+        piscines = round(total / 2500, 2)
+        result.append({'nom': site, 'm3': int(total), 'piscines': piscines})
+    return jsonify(result)
+
+@app.route('/api/accueil/reset_regularite', methods=['POST'])
+@login_required
+def api_accueil_reset_regularite():
+    data = request.get_json()
+    type_ = data.get('type')
+    nom = data.get('nom')
+    if not type_ or not nom:
+        return jsonify({'error': 'Paramètres manquants'}), 400
+    RESET_REGULARITE[(type_, nom)] = datetime.now().date()
     return jsonify({'success': True})
 
 if __name__ == '__main__':

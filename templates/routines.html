@@ -316,13 +316,15 @@ function afficherFormulaireRempli() {
                 container.innerHTML = '<div class="alert alert-info">Aucune réponse pour ce formulaire à cette date.</div>';
                 return;
             }
+            // Bouton suppression journée
+            let boutonSupp = `<div class='text-end mb-3'><button class='btn btn-danger' onclick='supprimerJourneeRoutine(${formulaireId}, "${date}")'><i class="fas fa-trash"></i> Supprimer la journée</button></div>`;
             // Grouper par lieu
             const groupedByLieu = {};
             reponses.forEach(r => {
                 if (!groupedByLieu[r.lieu]) groupedByLieu[r.lieu] = [];
                 groupedByLieu[r.lieu].push(r);
             });
-            let html = '';
+            let html = boutonSupp;
             Object.keys(groupedByLieu).forEach(lieu => {
                 // Trier par id_question croissant
                 groupedByLieu[lieu].sort((a, b) => {
@@ -366,6 +368,21 @@ function afficherFormulaireRempli() {
         .catch(() => {
             container.innerHTML = '<div class="alert alert-danger">Erreur lors du chargement des réponses.</div>';
         });
+}
+
+function supprimerJourneeRoutine(formulaireId, date) {
+    if (!confirm('Supprimer toutes les réponses de ce formulaire pour cette journée ?')) return;
+    fetch(`/api/routines/reponses/${formulaireId}/${date}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                alert('Formulaire supprimé pour cette journée.');
+                afficherFormulaireRempli();
+            } else {
+                alert(data.error || 'Erreur lors de la suppression.');
+            }
+        })
+        .catch(() => alert('Erreur lors de la suppression.'));
 }
 
 function exporterFormulaire() {
