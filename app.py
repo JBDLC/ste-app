@@ -1392,7 +1392,7 @@ def api_import_excel():
         inserted_count = 0
         
         for index, row in df.iterrows():
-            if pd.notna(row['id']).item() and pd.notna(row['lieu']).item() and pd.notna(row['question']).item():
+            if str(row['id']).strip() != '' and str(row['lieu']).strip() != '' and str(row['question']).strip() != '':
                 id_question = str(row['id'])
                 
                 # Vérifier si la question existe déjà
