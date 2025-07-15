@@ -39,14 +39,18 @@ if os.environ.get('DATABASE_URL'):
         # Render utilise postgres:// mais SQLAlchemy attend postgresql://
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    print(f"Configuration PostgreSQL détectée: {database_url[:50] if database_url else 'None'}...")
-elif os.environ.get('RENDER') and not os.environ.get('DATABASE_URL'):
-    # Sur Render, utiliser un chemin persistant pour SQLite (fallback uniquement)
+    print(f"✅ Configuration PostgreSQL détectée: {database_url[:50] if database_url else 'None'}...")
+    print(f"   Type de base: PostgreSQL")
+    print(f"   URL complète: {database_url}")
+    
+elif os.environ.get('RENDER'):
+    # Sur Render sans DATABASE_URL, utiliser un chemin persistant pour SQLite (fallback uniquement)
     db_path = '/opt/render/project/src/ste_releve.db'
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
     print(f"⚠️ ATTENTION: Configuration SQLite Render (fallback) - DATABASE_URL manquant!")
     print(f"   Base de données: {db_path}")
     print(f"   ⚠️ Les données peuvent être perdues lors du redéploiement!")
+    print(f"   🔧 Vérifiez que la base PostgreSQL 'ste-app-db' existe sur Render!")
 else:
     # En local, utiliser le chemin relatif
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ste_releve.db'
@@ -60,6 +64,17 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'  # type: ignore
 
+# Vérifier que la base PostgreSQL est accessible (après la définition de db)
+if os.environ.get('DATABASE_URL') and ('postgresql' in app.config['SQLALCHEMY_DATABASE_URI'] or 'postgres' in app.config['SQLALCHEMY_DATABASE_URI']):
+    try:
+        with app.app_context():
+            db.engine.connect()
+            print(f"   ✅ Connexion PostgreSQL réussie!")
+    except Exception as e:
+        print(f"   ❌ ERREUR: Impossible de se connecter à PostgreSQL: {e}")
+        print(f"   🔧 Vérifiez que la base 'ste-app-db' existe sur Render!")
+        print(f"   🔧 Vérifiez que DATABASE_URL est correctement configuré!")
+        
 # Créer le dossier uploads s'il n'existe pas
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -67,7 +82,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(120), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)  # Augmenté de 120 à 255
     role = db.Column(db.String(20), default='operateur')  # operateur, chef_equipe, admin
     page_accesses = relationship('UserPageAccess', back_populates='user', cascade='all, delete-orphan')
 
@@ -2181,6 +2196,17 @@ def api_database_status():
         # Estimation de la taille
         estimated_size_mb = (nb_releves * 0.001) + (nb_photos * 2) + (nb_routines * 0.001)
         
+        # Déterminer le type de base de données
+        db_uri = app.config['SQLALCHEMY_DATABASE_URI']
+        if 'postgresql' in db_uri or 'postgres' in db_uri:
+            db_type = 'PostgreSQL'
+            db_icon = 'database'
+            db_color = 'primary'
+        else:
+            db_type = 'SQLite'
+            db_icon = 'hdd'
+            db_color = 'secondary'
+        
         # Statut de l'espace
         if estimated_size_mb > 900:
             status = 'critical'
@@ -2197,6 +2223,9 @@ def api_database_status():
             'message': message,
             'estimated_size_mb': round(estimated_size_mb, 2),
             'usage_percent': round((estimated_size_mb / 1024) * 100, 1),
+            'db_type': db_type,
+            'db_icon': db_icon,
+            'db_color': db_color,
             'stats': {
                 'releves': nb_releves,
                 'photos': nb_photos,
