@@ -1883,6 +1883,10 @@ def init_db():
                 admin.password_hash = generate_password_hash('admin123')
                 admin.role = 'admin'
                 db.session.add(admin)
+                print("✅ Utilisateur admin créé avec succès!")
+                print("   Username: admin")
+                print("   Password: admin123")
+                print("   Role: admin")
             
             db.session.commit()
 
@@ -1944,6 +1948,7 @@ def init_db():
         
         db.session.commit()
         print("✅ Mise à jour des unités terminée")
+        print("✅ Base de données initialisée avec succès!")
 
 # Liste des pages gérables pour les droits
 PAGE_NAMES = [
