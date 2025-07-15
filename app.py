@@ -2681,6 +2681,44 @@ def api_accueil_reset_regularite():
     RESET_REGULARITE[(type_, nom)] = datetime.now().date()
     return jsonify({'success': True})
 
+@app.route('/force_reset_db')
+def force_reset_db():
+    """Route temporaire pour forcer la réinitialisation de la base"""
+    try:
+        from werkzeug.security import generate_password_hash
+        
+        with app.app_context():
+            # Supprimer toutes les tables
+            db.drop_all()
+            db.create_all()
+            
+            # Créer les sites
+            smp = Site(nom='SMP', description='Station de traitement des eaux SMP')
+            lpz = Site(nom='LPZ', description='Station de traitement des eaux LPZ')
+            db.session.add(smp)
+            db.session.add(lpz)
+            db.session.commit()
+            
+            # Créer l'utilisateur admin
+            admin = User()
+            admin.username = 'admin'
+            admin.password_hash = generate_password_hash('admin123')
+            admin.role = 'admin'
+            db.session.add(admin)
+            db.session.commit()
+            
+            return """
+            <h1>✅ Base de données réinitialisée avec succès!</h1>
+            <p>Vous pouvez maintenant vous connecter avec :</p>
+            <ul>
+                <li><strong>Username:</strong> admin</li>
+                <li><strong>Password:</strong> admin123</li>
+            </ul>
+            <p><a href="/login">Aller à la page de connexion</a></p>
+            """
+    except Exception as e:
+        return f"<h1>❌ Erreur: {e}</h1>"
+
 if __name__ == '__main__':
     init_db()
     app.run(debug=True, host='0.0.0.0', port=5000) 
