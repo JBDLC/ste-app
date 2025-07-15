@@ -98,6 +98,11 @@ function genererTableauReleves(typesReleve) {
         
         tbody.appendChild(row);
     });
+    
+    // Attacher les événements aux nouveaux éléments
+    document.querySelectorAll('.valeur-jour').forEach(input => {
+        input.addEventListener('input', calculerDifferences);
+    });
 }
 
 function updateDateLettres() {
@@ -116,9 +121,11 @@ function updateDateLettres() {
         
         if (eauPotableInput) {
             eauPotableInput.disabled = !isMonday;
+            eauPotableInput.style.backgroundColor = isMonday ? '' : '#f8f9fa';
         }
         if (coagulantInput) {
             coagulantInput.disabled = !isMonday;
+            coagulantInput.style.backgroundColor = isMonday ? '' : '#f8f9fa';
         }
         if (infoEauPotable) {
             infoEauPotable.style.color = isMonday ? '#198754' : '#6c757d';

@@ -1375,7 +1375,7 @@ def api_import_excel():
         inserted_count = 0
         
         for index, row in df.iterrows():
-            if pd.notna(row['id']) and pd.notna(row['lieu']) and pd.notna(row['question']):
+            if pd.notna(row['id']).item() and pd.notna(row['lieu']).item() and pd.notna(row['question']).item():
                 id_question = str(row['id'])
                 
                 # Vérifier si la question existe déjà
@@ -2392,6 +2392,80 @@ def create_releve_20_zip(session_id):
     except Exception as e:
         print(f"Erreur création ZIP relevé 20: {e}")
         return None
+
+def create_routine_pdfs_by_formulaire():
+    """Crée des PDFs pour chaque formulaire de routine rempli"""
+    try:
+        # Récupérer tous les formulaires qui ont des réponses
+        formulaires_avec_reponses = db.session.query(ReponseRoutine.formulaire_id).distinct().all()
+        pdfs = []
+        
+        for (formulaire_id,) in formulaires_avec_reponses:
+            # Récupérer toutes les réponses pour ce formulaire
+            reponses = db.session.query(ReponseRoutine, QuestionRoutine, FormulaireRoutine).join(
+                QuestionRoutine, ReponseRoutine.question_id == QuestionRoutine.id
+            ).join(
+                FormulaireRoutine, ReponseRoutine.formulaire_id == FormulaireRoutine.id
+            ).filter(
+                ReponseRoutine.formulaire_id == formulaire_id
+            ).order_by(ReponseRoutine.date_creation.desc(), QuestionRoutine.lieu, QuestionRoutine.id_question).all()
+            
+            if not reponses:
+                continue
+                
+            # Créer le PDF
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font('Arial', 'B', 16)
+            pdf.cell(0, 10, f'Rapport Routine: {reponses[0][2].nom}', ln=1, align='C')
+            pdf.set_font('Arial', '', 12)
+            pdf.cell(0, 10, f'Généré le: {datetime.now().strftime("%d/%m/%Y à %H:%M")}', ln=1, align='C')
+            pdf.ln(10)
+            
+            # Grouper par lieu
+            grouped_by_lieu = {}
+            for reponse, question, formulaire in reponses:
+                if question.lieu not in grouped_by_lieu:
+                    grouped_by_lieu[question.lieu] = []
+                grouped_by_lieu[question.lieu].append((reponse, question))
+            
+            for lieu, lieu_reponses in grouped_by_lieu.items():
+                pdf.set_font('Arial', 'B', 12)
+                pdf.cell(0, 8, f'Lieu: {lieu}', ln=1)
+                pdf.ln(3)
+                
+                for reponse, question in lieu_reponses:
+                    pdf.set_font('Arial', '', 10)
+                    pdf.multi_cell(0, 5, f'Question {question.id_question}: {question.question}')
+                    pdf.set_font('Arial', 'B', 10)
+                    pdf.cell(0, 5, f'Réponse: {reponse.reponse}', ln=1)
+                    if reponse.commentaire:
+                        pdf.set_font('Arial', '', 9)
+                        pdf.multi_cell(0, 4, f'Commentaire: {reponse.commentaire}')
+                    pdf.ln(3)
+                
+                pdf.ln(5)
+            
+            # Sauvegarder le PDF
+            pdf_filename = f"routine_{formulaire_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_filename)
+            pdf_bytes = pdf.output(dest='S')
+            if isinstance(pdf_bytes, str):
+                pdf_bytes = pdf_bytes.encode('latin1')
+            
+            with open(pdf_path, 'wb') as f:
+                f.write(pdf_bytes)
+            
+            pdfs.append({
+                'path': pdf_path,
+                'filename': pdf_filename
+            })
+        
+        return pdfs
+        
+    except Exception as e:
+        print(f"Erreur lors de la création des PDFs routines: {e}")
+        return []
 
 def cleanup_and_send_reports():
     try:

@@ -96,6 +96,11 @@ function genererTableauReleves(typesReleve) {
         
         tbody.appendChild(row);
     });
+    
+    // Attacher les événements aux nouveaux éléments
+    document.querySelectorAll('.valeur-jour').forEach(input => {
+        input.addEventListener('input', calculerDifferences);
+    });
 }
 
 function updateDateLettres() {
@@ -107,12 +112,27 @@ function updateDateLettres() {
         
         // Désactiver Eau potable et Coagulant si ce n'est pas lundi
         const isMonday = date.getDay() === 1;
-        document.getElementById('eauPotable').disabled = !isMonday;
-        document.getElementById('coagulant').disabled = !isMonday;
-        document.getElementById('info-eauPotable').style.color = isMonday ? '#198754' : '#6c757d';
-        document.getElementById('info-eauPotable').textContent = isMonday ? 'Saisissable (lundi)' : 'Saisissable uniquement le lundi';
-        document.getElementById('info-coagulant').style.color = isMonday ? '#198754' : '#6c757d';
-        document.getElementById('info-coagulant').textContent = isMonday ? 'Saisissable (lundi)' : 'Saisissable uniquement le lundi';
+        const eauPotableInput = document.getElementById('Eaupotable');
+        const coagulantInput = document.getElementById('Coagulant');
+        const infoEauPotable = document.getElementById('info-Eaupotable');
+        const infoCoagulant = document.getElementById('info-Coagulant');
+        
+        if (eauPotableInput) {
+            eauPotableInput.disabled = !isMonday;
+            eauPotableInput.style.backgroundColor = isMonday ? '' : '#f8f9fa';
+        }
+        if (coagulantInput) {
+            coagulantInput.disabled = !isMonday;
+            coagulantInput.style.backgroundColor = isMonday ? '' : '#f8f9fa';
+        }
+        if (infoEauPotable) {
+            infoEauPotable.style.color = isMonday ? '#198754' : '#6c757d';
+            infoEauPotable.textContent = isMonday ? 'Saisissable (lundi)' : 'Saisissable uniquement le lundi';
+        }
+        if (infoCoagulant) {
+            infoCoagulant.style.color = isMonday ? '#198754' : '#6c757d';
+            infoCoagulant.textContent = isMonday ? 'Saisissable (lundi)' : 'Saisissable uniquement le lundi';
+        }
         
         // Charger les données pour cette date
         chargerDonneesDate();
