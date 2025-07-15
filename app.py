@@ -2155,7 +2155,7 @@ def check_database_size():
             nb_routines = ReponseRoutine.query.count()
             
             # Estimation de la taille (approximative)
-            estimated_size_mb = (nb_releves * 0.001) + (nb_photos * 2) + (nb_routines * 0.001)
+            estimated_size_mb = (nb_releves * 0.01) + (nb_photos * 2) + (nb_routines * 0.01)
             
             print(f"📊 Taille estimée de la base : {estimated_size_mb:.2f} MB")
             print(f"   - {nb_releves} relevés")
@@ -2199,7 +2199,7 @@ def api_database_status():
         nb_users = User.query.count()
         
         # Estimation de la taille
-        estimated_size_mb = (nb_releves * 0.001) + (nb_photos * 2) + (nb_routines * 0.001)
+        estimated_size_mb = (nb_releves * 0.01) + (nb_photos * 2) + (nb_routines * 0.01)
         
         # Déterminer le type de base de données
         db_uri = app.config['SQLALCHEMY_DATABASE_URI']

@@ -399,7 +399,7 @@ function enregistrerToutesReponses() {
     // On parcourt toutes les questions
     questions.forEach(q => {
         const rep = reponses[q.id];
-        if (rep && rep.reponse) {
+        if (rep && rep.reponse && rep.reponse.trim() !== '') {
             total++;
             // On envoie chaque réponse (POST ou PUT selon si déjà existante)
             const formData = new FormData();
