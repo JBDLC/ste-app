@@ -40,11 +40,13 @@ if os.environ.get('DATABASE_URL'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     print(f"Configuration PostgreSQL détectée: {database_url[:50] if database_url else 'None'}...")
-elif os.environ.get('RENDER'):
-    # Sur Render, utiliser un chemin persistant pour SQLite
+elif os.environ.get('RENDER') and not os.environ.get('DATABASE_URL'):
+    # Sur Render, utiliser un chemin persistant pour SQLite (fallback uniquement)
     db_path = '/opt/render/project/src/ste_releve.db'
     app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
-    print(f"Configuration SQLite Render: {db_path}")
+    print(f"⚠️ ATTENTION: Configuration SQLite Render (fallback) - DATABASE_URL manquant!")
+    print(f"   Base de données: {db_path}")
+    print(f"   ⚠️ Les données peuvent être perdues lors du redéploiement!")
 else:
     # En local, utiliser le chemin relatif
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ste_releve.db'
