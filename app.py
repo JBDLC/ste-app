@@ -1442,13 +1442,15 @@ def api_sauvegarder_reponse():
     if not all([formulaire_id, question_id, reponse]):
         return jsonify({'error': 'Données manquantes'}), 400
     
-    # Créer la réponse
+    # Créer la réponse avec la date d'aujourd'hui (UTC pour éviter les problèmes de fuseau horaire)
     nouvelle_reponse = ReponseRoutine(
         formulaire_id=formulaire_id,
         question_id=question_id,
         reponse=reponse,
         commentaire=commentaire,
-        utilisateur_id=current_user.id
+        utilisateur_id=current_user.id,
+        date_creation=datetime.utcnow().date(),  # Utiliser UTC pour éviter les problèmes de fuseau horaire
+        heure_creation=datetime.utcnow().time()
     )
     
     db.session.add(nouvelle_reponse)
@@ -1499,8 +1501,8 @@ def api_modifier_reponse(reponse_id):
     reponse = ReponseRoutine.query.get(reponse_id)
     if not reponse:
         return jsonify({'error': 'Réponse non trouvée'}), 404
-    # Vérifier que la réponse date d'aujourd'hui
-    if reponse.date_creation != datetime.now().date():
+    # Vérifier que la réponse date d'aujourd'hui (utiliser UTC)
+    if reponse.date_creation != datetime.utcnow().date():
         return jsonify({'error': 'Modification non autorisée'}), 403
     data = request.form.to_dict()
     reponse.reponse = data.get('reponse', reponse.reponse)
@@ -1516,8 +1518,8 @@ def api_supprimer_reponse(reponse_id):
     if not reponse:
         return jsonify({'error': 'Réponse non trouvée'}), 404
     
-    # Vérifier que la réponse date d'aujourd'hui
-    if reponse.date_creation != datetime.now().date():
+    # Vérifier que la réponse date d'aujourd'hui (utiliser UTC)
+    if reponse.date_creation != datetime.utcnow().date():
         return jsonify({'error': 'Suppression non autorisée'}), 403
     
     db.session.delete(reponse)
@@ -1733,7 +1735,7 @@ def api_export_excel_formulaire(formulaire_id):
 @app.route('/api/routines/formulaires_remplis_aujourdhui')
 @login_required
 def api_formulaires_remplis_aujourdhui():
-    today = datetime.now().date()
+    today = datetime.utcnow().date()  # Utiliser UTC pour éviter les problèmes de fuseau horaire
     count = db.session.query(ReponseRoutine.formulaire_id).filter(ReponseRoutine.date_creation == today).distinct().count()
     return jsonify({'formulaires_remplis': count})
 
@@ -1744,12 +1746,15 @@ def api_supprimer_routine_journee(formulaire_id, date):
         date_obj = datetime.strptime(date, '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'error': 'Format de date invalide'}), 400
+    
     reponses = ReponseRoutine.query.filter_by(formulaire_id=formulaire_id, date_creation=date_obj).all()
     if not reponses:
         return jsonify({'error': 'Aucune réponse à supprimer'}), 404
+    
     for rep in reponses:
         db.session.delete(rep)
     db.session.commit()
+    
     return jsonify({'success': True})
 
 # Initialisation de la base de données
@@ -2718,6 +2723,54 @@ def force_reset_db():
             """
     except Exception as e:
         return f"<h1>❌ Erreur: {e}</h1>"
+
+
+
+@app.route('/api/routines/reponses/<int:formulaire_id>/<date>')
+@login_required
+def api_reponses_formulaire_date(formulaire_id, date):
+    """Récupère les réponses pour un formulaire et une date spécifiques"""
+    try:
+        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Format de date invalide'}), 400
+    
+    try:
+        # Récupérer les réponses pour ce formulaire et cette date
+        reponses = db.session.query(ReponseRoutine, QuestionRoutine, FormulaireRoutine).join(
+            QuestionRoutine, ReponseRoutine.question_id == QuestionRoutine.id
+        ).join(
+            FormulaireRoutine, ReponseRoutine.formulaire_id == FormulaireRoutine.id
+        ).filter(
+            ReponseRoutine.formulaire_id == formulaire_id,
+            ReponseRoutine.date_creation == date_obj
+        ).order_by(QuestionRoutine.lieu, QuestionRoutine.id_question).all()
+        
+        result = []
+        for reponse, question, formulaire in reponses:
+            result.append({
+                'id': reponse.id,
+                'formulaire_id': reponse.formulaire_id,
+                'formulaire_nom': formulaire.nom,
+                'question_id': reponse.question_id,
+                'id_question': question.id_question,
+                'lieu': question.lieu,
+                'question': question.question,
+                'reponse': reponse.reponse,
+                'commentaire': reponse.commentaire,
+                'date_creation': reponse.date_creation.isoformat(),
+                'heure_creation': reponse.heure_creation.isoformat() if reponse.heure_creation else None,
+                'photo_path': getattr(reponse, 'photo_path', None)  # Pour compatibilité future
+            })
+        
+        return jsonify({
+            'formulaire_id': formulaire_id,
+            'date': date,
+            'reponses': result
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     init_db()
