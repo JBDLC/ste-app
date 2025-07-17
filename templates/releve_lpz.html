@@ -22,11 +22,11 @@
             <table class="table table-bordered align-middle">
                 <thead>
                     <tr>
-                        <th>Équipement</th>
-                        <th>Valeur du jour</th>
-                        <th>Unité</th>
-                        <th>Valeur veille</th>
-                        <th>Différence</th>
+                        <th class="col-equipement">Équipement</th>
+                        <th class="col-valeur-jour">Valeur du jour</th>
+                        <th class="col-unite"></th>
+                        <th class="col-valeur-veille">Valeur veille</th>
+                        <th class="col-difference">Différence</th>
                     </tr>
                 </thead>
                 <tbody id="releves-tbody">
@@ -89,7 +89,7 @@ function genererTableauReleves(typesReleve) {
                        data-type-id="${tr.id}"
                        ${isHebdomadaire ? `id="${tr.nom.replace(/ /g, '')}"` : ''}>
             </td>
-            <td>${tr.unite}</td>
+            <td class="text-center"><small class="text-muted">${tr.unite}</small></td>
             <td><span class="valeur-veille text-muted" data-nom="${tr.nom}">-</span></td>
             <td><span class="difference text-muted" data-nom="${tr.nom}">-</span></td>
         `;

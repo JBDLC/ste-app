@@ -181,6 +181,53 @@
             object-fit: contain;
             filter: brightness(0) invert(1); /* logo blanc */
         }
+        
+        /* Optimisation des colonnes pour les relevés */
+        .col-equipement {
+            width: 25%;
+            min-width: 150px;
+        }
+        .col-valeur-jour {
+            width: 35%;
+            min-width: 200px;
+        }
+        .col-unite {
+            width: 8%;
+            min-width: 60px;
+            text-align: center;
+        }
+        .col-valeur-veille {
+            width: 16%;
+            min-width: 120px;
+        }
+        .col-difference {
+            width: 16%;
+            min-width: 120px;
+        }
+        
+        /* Responsive pour les colonnes */
+        @media (max-width: 768px) {
+            .col-equipement {
+                width: 30%;
+                min-width: 120px;
+            }
+            .col-valeur-jour {
+                width: 40%;
+                min-width: 150px;
+            }
+            .col-unite {
+                width: 10%;
+                min-width: 50px;
+            }
+            .col-valeur-veille {
+                width: 10%;
+                min-width: 80px;
+            }
+            .col-difference {
+                width: 10%;
+                min-width: 80px;
+            }
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
