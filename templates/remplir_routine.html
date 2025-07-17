@@ -155,6 +155,7 @@
 #questions-container {
     overflow-x: auto;
 }
+</style>
 
 <script>
 let formulaireId = {{ formulaire_id }};
@@ -202,12 +203,25 @@ function chargerReponses() {
     fetch(`/api/routines/reponses/${aujourdhui}`)
         .then(response => response.json())
         .then(data => {
+            // Préserver les réponses locales non sauvegardées
+            const reponsesLocales = { ...reponses };
+            
+            // Réinitialiser avec les données de la base
             reponses = {};
             data.forEach(reponse => {
                 if (reponse.formulaire_id == formulaireId) {
                     reponses[reponse.question_id] = reponse;
                 }
             });
+            
+            // Restaurer les réponses locales qui n'ont pas d'ID (non sauvegardées)
+            Object.keys(reponsesLocales).forEach(questionId => {
+                const reponseLocale = reponsesLocales[questionId];
+                if (!reponseLocale.id || reponseLocale.id === 'undefined') {
+                    reponses[questionId] = reponseLocale;
+                }
+            });
+            
             afficherQuestions();
         })
         .catch(error => {
@@ -373,15 +387,42 @@ function sauvegarderReponse() {
         if (data.error) {
             alert('Erreur : ' + data.error);
         } else {
+            // Mettre à jour la réponse locale avec l'ID retourné
+            if (data.id) {
+                reponses[questionId].id = data.id;
+            }
+            reponses[questionId].commentaire = commentaire;
+            
             const modal = bootstrap.Modal.getInstance(document.getElementById('detailModal'));
             modal.hide();
-            chargerReponses();
+            
+            // Recharger seulement cette réponse depuis la base pour avoir les données complètes
+            chargerReponseUnique(questionId);
         }
     })
     .catch(error => {
         console.error('Erreur lors de la modification:', error);
         alert('Erreur lors de la modification');
     });
+}
+
+// Nouvelle fonction pour charger une seule réponse
+function chargerReponseUnique(questionId) {
+    const aujourdhui = new Date().toISOString().split('T')[0];
+    fetch(`/api/routines/reponses/${aujourdhui}`)
+        .then(response => response.json())
+        .then(data => {
+            // Trouver la réponse pour cette question
+            const reponse = data.find(r => r.question_id == questionId && r.formulaire_id == formulaireId);
+            if (reponse) {
+                // Mettre à jour seulement cette réponse dans l'objet local
+                reponses[questionId] = reponse;
+                afficherQuestions();
+            }
+        })
+        .catch(error => {
+            console.error('Erreur lors du chargement de la réponse:', error);
+        });
 }
 
 function mettreAJourProgress() {
