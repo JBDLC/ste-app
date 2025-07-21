@@ -114,7 +114,8 @@ class PhotoReleve(db.Model):
     date = db.Column(db.Date, nullable=False)
     site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False)
     nom_debitmetre = db.Column(db.String(100), nullable=False)
-    fichier_photo = db.Column(db.String(200), nullable=False)
+    fichier_photo = db.Column(db.String(200), nullable=False)  # Nom du fichier pour compatibilité
+    contenu_photo = db.Column(db.LargeBinary, nullable=True)  # Contenu binaire de la photo
     utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     commentaire = db.Column(db.Text)
     session_id = db.Column(db.String(50), nullable=False)  # Identifiant unique de la session de relevé
@@ -574,7 +575,11 @@ def upload_photo():
         if not session_id:
             session_id = f"{current_user.id}_{site_nom}_{timestamp}"
         
-        # Sauvegarder le fichier
+        # Lire le contenu du fichier
+        file_content = file.read()
+        file.seek(0)  # Remettre le curseur au début pour la sauvegarde fichier
+        
+        # Sauvegarder le fichier (pour compatibilité locale)
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
         
@@ -584,6 +589,7 @@ def upload_photo():
             site_id=site_id,  # Utiliser l'ID numérique
             nom_debitmetre=nom_debitmetre,
             fichier_photo=filename,
+            contenu_photo=file_content,  # Stocker le contenu binaire
             utilisateur_id=current_user.id,
             commentaire=commentaire,
             session_id=session_id
@@ -1793,6 +1799,25 @@ def init_db():
         except Exception as e:
             print(f"Erreur lors de la vérification de la migration : {e}")
         
+        # Migration : ajouter contenu_photo aux photos existantes si nécessaire
+        try:
+            inspector = db.inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('photo_releve')]
+            
+            if 'contenu_photo' not in columns:
+                print("Migration : ajout de la colonne contenu_photo...")
+                try:
+                    with db.engine.connect() as conn:
+                        conn.execute(text('ALTER TABLE photo_releve ADD COLUMN contenu_photo BYTEA'))
+                        conn.commit()
+                    print("Colonne contenu_photo ajoutée avec succès")
+                except Exception as e:
+                    print(f"Erreur lors de l'ajout de la colonne contenu_photo : {e}")
+            else:
+                print("Colonne contenu_photo déjà présente")
+        except Exception as e:
+            print(f"Erreur lors de la vérification de la migration contenu_photo : {e}")
+        
         # Créer les sites
         if not Site.query.first():
             smp = Site(nom='SMP', description='Station de traitement des eaux SMP')
@@ -2167,21 +2192,10 @@ def check_database_size():
             print(f"   - {nb_photos} photos")
             print(f"   - {nb_routines} réponses de routine")
             
-            # Déclencher le nettoyage automatique si > 800MB
+            # Afficher un avertissement si > 800MB (sans déclencher automatiquement)
             if estimated_size_mb > 800:
                 print("⚠️ ATTENTION : Base de données proche de la limite (1GB)")
-                print("🔄 Déclenchement du nettoyage automatique avec envoi de rapports...")
-                
-                # Lancer le nettoyage en arrière-plan
-                def background_cleanup():
-                    with app.app_context():
-                        cleanup_and_send_reports()
-                
-                cleanup_thread = Thread(target=background_cleanup)
-                cleanup_thread.daemon = True
-                cleanup_thread.start()
-                
-                print("✅ Nettoyage automatique lancé en arrière-plan")
+                print("💡 Utilisez le bouton 'Nettoyage automatique' dans l'interface admin pour nettoyer")
             
             return estimated_size_mb
             
@@ -2414,12 +2428,28 @@ def create_releve_20_zip(session_id):
         zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
         
         with zipfile.ZipFile(zip_path, 'w') as zipf:
+            photos_ajoutees = 0
             for photo in photos:
+                # Essayer d'abord le fichier local, puis le contenu de la base
                 photo_path = os.path.join(app.config['UPLOAD_FOLDER'], photo.fichier_photo)
                 if os.path.exists(photo_path):
-                    # Nom du fichier dans le ZIP : nom_debitmetre/nom_photo.jpg
-                    arcname = f"{photo.nom_debitmetre}/{photo.fichier_photo}"
+                    # Utiliser le fichier local s'il existe
+                    arcname = photo.fichier_photo
                     zipf.write(photo_path, arcname)
+                    photos_ajoutees += 1
+                    print(f"✅ Photo ajoutée depuis fichier local: {photo.fichier_photo}")
+                elif photo.contenu_photo:
+                    # Utiliser le contenu de la base de données
+                    arcname = photo.fichier_photo
+                    zipf.writestr(arcname, photo.contenu_photo)
+                    photos_ajoutees += 1
+                    print(f"✅ Photo ajoutée depuis base de données: {photo.fichier_photo}")
+                else:
+                    print(f"⚠️ Photo non trouvée (ni fichier ni contenu): {photo.fichier_photo}")
+            
+            if photos_ajoutees == 0:
+                print(f"❌ Aucune photo trouvée pour la session {session_id}")
+                return None
         
         # Vérification du contenu du ZIP (debug)
         with zipfile.ZipFile(zip_path, 'r') as zipf:
@@ -2434,79 +2464,7 @@ def create_releve_20_zip(session_id):
         print(f"Erreur création ZIP relevé 20: {e}")
         return None
 
-def create_routine_pdfs_by_formulaire():
-    """Crée des PDFs pour chaque formulaire de routine rempli"""
-    try:
-        # Récupérer tous les formulaires qui ont des réponses
-        formulaires_avec_reponses = db.session.query(ReponseRoutine.formulaire_id).distinct().all()
-        pdfs = []
-        
-        for (formulaire_id,) in formulaires_avec_reponses:
-            # Récupérer toutes les réponses pour ce formulaire
-            reponses = db.session.query(ReponseRoutine, QuestionRoutine, FormulaireRoutine).join(
-                QuestionRoutine, ReponseRoutine.question_id == QuestionRoutine.id
-            ).join(
-                FormulaireRoutine, ReponseRoutine.formulaire_id == FormulaireRoutine.id
-            ).filter(
-                ReponseRoutine.formulaire_id == formulaire_id
-            ).order_by(ReponseRoutine.date_creation.desc(), QuestionRoutine.lieu, QuestionRoutine.id_question).all()
-            
-            if not reponses:
-                continue
-                
-            # Créer le PDF
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font('Arial', 'B', 16)
-            pdf.cell(0, 10, f'Rapport Routine: {reponses[0][2].nom}', ln=1, align='C')
-            pdf.set_font('Arial', '', 12)
-            pdf.cell(0, 10, f'Généré le: {datetime.now().strftime("%d/%m/%Y à %H:%M")}', ln=1, align='C')
-            pdf.ln(10)
-            
-            # Grouper par lieu
-            grouped_by_lieu = {}
-            for reponse, question, formulaire in reponses:
-                if question.lieu not in grouped_by_lieu:
-                    grouped_by_lieu[question.lieu] = []
-                grouped_by_lieu[question.lieu].append((reponse, question))
-            
-            for lieu, lieu_reponses in grouped_by_lieu.items():
-                pdf.set_font('Arial', 'B', 12)
-                pdf.cell(0, 8, f'Lieu: {lieu}', ln=1)
-                pdf.ln(3)
-                
-                for reponse, question in lieu_reponses:
-                    pdf.set_font('Arial', '', 10)
-                    pdf.multi_cell(0, 5, f'Question {question.id_question}: {question.question}')
-                    pdf.set_font('Arial', 'B', 10)
-                    pdf.cell(0, 5, f'Réponse: {reponse.reponse}', ln=1)
-                    if reponse.commentaire:
-                        pdf.set_font('Arial', '', 9)
-                        pdf.multi_cell(0, 4, f'Commentaire: {reponse.commentaire}')
-                    pdf.ln(3)
-                
-                pdf.ln(5)
-            
-            # Sauvegarder le PDF
-            pdf_filename = f"routine_{formulaire_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_filename)
-            pdf_bytes = pdf.output(dest='S')
-            if isinstance(pdf_bytes, str):
-                pdf_bytes = pdf_bytes.encode('latin1')
-            
-            with open(pdf_path, 'wb') as f:
-                f.write(pdf_bytes)
-            
-            pdfs.append({
-                'path': pdf_path,
-                'filename': pdf_filename
-            })
-        
-        return pdfs
-        
-    except Exception as e:
-        print(f"Erreur lors de la création des PDFs routines: {e}")
-        return []
+
 
 def cleanup_and_send_reports():
     try:
@@ -2514,8 +2472,9 @@ def cleanup_and_send_reports():
         if not config.email_address:
             print("Aucune adresse email configurée")
             return False
-        print("🔄 Début du nettoyage automatique avec envoi de rapports...")
-        # 1. Envoyer les relevés du 20 (inchangé)
+        print("🔄 Début du nettoyage automatique avec envoi des relevés du 20...")
+        
+        # 1. Envoyer les relevés du 20 avec dossier daté
         sessions_photos = db.session.query(PhotoReleve.session_id).distinct().all()
         for (session_id,) in sessions_photos:
             zip_file = create_releve_20_zip(session_id)
@@ -2524,67 +2483,40 @@ def cleanup_and_send_reports():
                 if first_photo:
                     site = Site.query.get(first_photo.site_id)
                     user = User.query.get(first_photo.utilisateur_id)
-                    subject = f"Relevé du 20 - {site.nom if site else 'Site'} - {first_photo.date.strftime('%d/%m/%Y')}"
+                    # Utiliser la date de prise des photos pour le nom du dossier
+                    date_photos = first_photo.date.strftime('%Y-%m-%d')
+                    subject = f"Relevé du 20 - {site.nom if site else 'Site'} - {date_photos}"
                     body = f"""
                     <h2>Relevé du 20 - {site.nom if site else 'Site'}</h2>
-                    <p><strong>Date:</strong> {first_photo.date.strftime('%d/%m/%Y')}</p>
+                    <p><strong>Date des photos:</strong> {date_photos}</p>
                     <p><strong>Utilisateur:</strong> {user.username if user else 'Inconnu'}</p>
                     <p><strong>Nombre de photos:</strong> {zip_file['photos_count']}</p>
-                    <p>Ce fichier ZIP contient toutes les photos du relevé organisées par débitmètre.</p>
+                    <p>Ce fichier ZIP contient toutes les photos du relevé directement à la racine.</p>
                     """
                     print(f"[CLEANUP] Envoi mail relevé 20: {subject}")
                     success = send_email_with_attachments(subject, body, [zip_file], config.email_address)
                     if success:
-                        print(f"[CLEANUP] Mail relevé 20 envoyé, suppression des photos...")
+                        print(f"[CLEANUP] Mail relevé 20 envoyé, suppression des photos et relevés...")
+                        # Supprimer les fichiers photos (si ils existent encore) - optionnel maintenant
                         photos_to_delete = PhotoReleve.query.filter_by(session_id=session_id).all()
                         for photo in photos_to_delete:
                             try:
                                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo.fichier_photo)
                                 if os.path.exists(file_path):
                                     os.remove(file_path)
+                                    print(f"✅ Fichier photo supprimé: {photo.fichier_photo}")
+                                else:
+                                    print(f"ℹ️ Fichier photo non trouvé (normal sur Render): {photo.fichier_photo}")
                             except Exception as e:
-                                print(f"Erreur suppression fichier {photo.fichier_photo}: {e}")
+                                print(f"⚠️ Erreur suppression fichier {photo.fichier_photo}: {e}")
+                        # Supprimer les enregistrements photos ET relevés du 20 (contenu binaire inclus)
                         PhotoReleve.query.filter_by(session_id=session_id).delete()
-                        print(f"✅ Relevé 20 {session_id} envoyé et supprimé")
+                        print(f"✅ Relevé 20 {session_id} envoyé et supprimé (contenu base inclus)")
                     try:
                         os.remove(zip_file['path'])
                     except:
                         pass
-        # 2. Générer tous les PDF routines par formulaire rempli
-        pdfs = create_routine_pdfs_by_formulaire()
-        if pdfs:
-            subject = f"Rapports Routines STE avec Photos - {datetime.now().strftime('%d/%m/%Y')}"
-            body = f"""
-            <h2>Rapports Routines STE avec Photos</h2>
-            <p><strong>Date de génération:</strong> {datetime.now().strftime('%d/%m/%Y à %H:%M')}</p>
-            <p>Un PDF par formulaire rempli est joint à ce mail.</p>
-            """
-            print(f"[CLEANUP] Envoi mail routines avec {len(pdfs)} PDF en PJ...")
-            success = send_email_with_attachments(subject, body, pdfs, config.email_address)
-            if success:
-                print(f"[CLEANUP] Mail routines envoyé, suppression des photos routines...")
-        else:
-            print("[CLEANUP] Aucun PDF routine à envoyer, mais suppression des photos routines quand même...")
-        # Supprimer toutes les photos des routines (fichiers + champ photo_path) dans tous les cas
-        routines_photos = ReponseRoutine.query.filter(ReponseRoutine.photo_path.isnot(None)).all()
-        for rep in routines_photos:
-            if rep.photo_path:
-                try:
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], rep.photo_path)
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                        print(f"[CLEANUP] Photo routine supprimée: {file_path}")
-                except Exception as e:
-                    print(f"Erreur suppression photo routine {rep.photo_path}: {e}")
-            rep.photo_path = None
-        print("✅ Toutes les photos des routines supprimées, réponses conservées")
-        # Nettoyer les PDF temporaires
-        for pdf in pdfs:
-            try:
-                os.remove(pdf['path'])
-                print(f"[CLEANUP] PDF temporaire supprimé: {pdf['path']}")
-            except:
-                pass
+        
         db.session.commit()
         print("✅ Nettoyage automatique terminé avec succès")
         return True
