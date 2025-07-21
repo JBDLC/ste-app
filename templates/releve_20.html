@@ -241,16 +241,27 @@ function chargerFormulaireDebitmetres() {
                                 <span class="badge bg-secondary" id="status-${site}-${debitmetre.replace(/\s+/g, '-')}">En attente</span>
                             </div>
                             <div class="col-md-5">
-                                <label for="photo-${site}-${debitmetre.replace(/\s+/g, '-')}" class="form-label small">Photo</label>
+                                <label class="form-label small">Photo</label>
+                                <div class="d-flex gap-2">
+                                    <button type="button" 
+                                            class="btn btn-outline-primary btn-sm flex-fill"
+                                            onclick="ouvrirAppareilPhoto('${site}', '${debitmetre}')">
+                                        <i class="fas fa-camera me-1"></i>Appareil photo
+                                    </button>
+                                    <button type="button" 
+                                            class="btn btn-outline-secondary btn-sm flex-fill"
+                                            onclick="ouvrirGalerie('${site}', '${debitmetre}')">
+                                        <i class="fas fa-images me-1"></i>Galerie
+                                    </button>
+                                </div>
                                 <input type="file" 
-                                       class="form-control form-control-sm photo-input" 
+                                       class="form-control form-control-sm photo-input d-none" 
                                        id="photo-${site}-${debitmetre.replace(/\s+/g, '-')}"
                                        data-site="${site}"
                                        data-debitmetre="${debitmetre}"
                                        accept="image/*" 
-                                       capture="environment"
                                        onchange="previewPhoto(this)">
-                                <div class="form-text small">Prenez ou téléchargez une photo</div>
+                                <div class="form-text small">Choisissez votre méthode de capture</div>
                             </div>
                             <div class="col-md-3">
                                 <div id="preview-${site}-${debitmetre.replace(/\s+/g, '-')}" style="display: none;">
@@ -270,6 +281,65 @@ function chargerFormulaireDebitmetres() {
     
     formulaireDiv.style.display = 'block';
     actualiserProgression();
+}
+
+function ouvrirAppareilPhoto(site, debitmetre) {
+    const inputId = `photo-${site}-${debitmetre.replace(/\s+/g, '-')}`;
+    const input = document.getElementById(inputId);
+    
+    // Créer un nouvel input temporaire avec capture
+    const tempInput = document.createElement('input');
+    tempInput.type = 'file';
+    tempInput.accept = 'image/*';
+    tempInput.capture = 'environment';
+    tempInput.style.display = 'none';
+    
+    tempInput.onchange = function(e) {
+        if (e.target.files && e.target.files[0]) {
+            // Copier le fichier vers l'input original
+            const dt = new DataTransfer();
+            dt.items.add(e.target.files[0]);
+            input.files = dt.files;
+            
+            // Déclencher la preview
+            previewPhoto(input);
+        }
+        
+        // Nettoyer
+        document.body.removeChild(tempInput);
+    };
+    
+    document.body.appendChild(tempInput);
+    tempInput.click();
+}
+
+function ouvrirGalerie(site, debitmetre) {
+    const inputId = `photo-${site}-${debitmetre.replace(/\s+/g, '-')}`;
+    const input = document.getElementById(inputId);
+    
+    // Créer un nouvel input temporaire sans capture
+    const tempInput = document.createElement('input');
+    tempInput.type = 'file';
+    tempInput.accept = 'image/*';
+    tempInput.style.display = 'none';
+    
+    tempInput.onchange = function(e) {
+        if (e.target.files && e.target.files[0]) {
+            // Copier le fichier vers l'input original
+            const dt = new DataTransfer();
+            dt.items.add(e.target.files[0]);
+            input.files = dt.files;
+            
+            // Déclencher la preview
+            previewPhoto(input);
+        }
+        
+        // Nettoyer
+        document.body.removeChild(tempInput);
+    };
+    
+    document.body.appendChild(tempInput);
+    tempInput.click();
 }
 
 function previewPhoto(input) {
