@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Code Magasin - STE Relevés{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">
+            <i class="fas fa-barcode me-2"></i>
+            Code Magasin
+        </h1>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <span class="badge bg-success fs-6">Actif</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code du jour -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-day me-2"></i>
+                        Code du jour
+                    </h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="display-1 fw-bold text-success mb-3" id="current-code">
+                        {{ current_code }}
+                    </div>
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-clock me-1"></i>
+                        Code généré pour {{ current_month }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historique mensuel -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history me-2"></i>
+                        Historique - {{ current_month }}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Code</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthly-codes">
+                                {% for code_entry in monthly_codes %}
+                                <tr {% if code_entry.date == today %}class="table-success"{% endif %}>
+                                    <td>{{ code_entry.date.strftime('%d/%m/%Y') }}</td>
+                                    <td>
+                                        <span class="badge bg-primary fs-6">{{ code_entry.code }}</span>
+                                    </td>
+                                    <td>
+                                        {% if code_entry.date == today %}
+                                            <span class="badge bg-success">Aujourd'hui</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Passé</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {% if not monthly_codes %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-inbox fa-3x mb-3"></i>
+                        <p>Aucun code enregistré pour ce mois.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Actualisation automatique du code toutes les 30 secondes
+setInterval(function() {
+    fetch('/api/code_magasin/current')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('current-code').textContent = data.code;
+        })
+        .catch(error => console.error('Erreur lors de la récupération du code:', error));
+}, 30000);
+
+// Actualisation de l'historique toutes les minutes
+setInterval(function() {
+    fetch('/api/code_magasin/monthly')
+        .then(response => response.json())
+        .then(data => {
+            const tbody = document.getElementById('monthly-codes');
+            tbody.innerHTML = '';
+            
+            data.codes.forEach(code => {
+                const row = document.createElement('tr');
+                if (code.is_today) {
+                    row.className = 'table-success';
+                }
+                
+                row.innerHTML = `
+                    <td>${code.date}</td>
+                    <td><span class="badge bg-primary fs-6">${code.code}</span></td>
+                    <td>
+                        ${code.is_today ? 
+                            '<span class="badge bg-success">Aujourd\'hui</span>' : 
+                            '<span class="badge bg-secondary">Passé</span>'
+                        }
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        })
+        .catch(error => console.error('Erreur lors de la récupération de l\'historique:', error));
+}, 60000);
+</script>
+{% endblock %} 

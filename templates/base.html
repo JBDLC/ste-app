@@ -31,15 +31,18 @@
             top: 0;
             left: 0;
             height: 100vh;
-            width: 240px;
+            width: 280px;
             z-index: 1000;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
         .sidebar .nav-link {
             color: rgba(255,255,255,0.85);
-            padding: 0.75rem 1rem;
+            padding: 0.75rem 1.25rem;
             border-radius: 0.5rem;
-            margin: 0.25rem 0;
+            margin: 0.25rem 0.5rem;
             transition: all 0.3s ease;
+            white-space: nowrap;
         }
         .sidebar .nav-link:hover,
         .sidebar .nav-link.active {
@@ -48,10 +51,38 @@
             font-weight: bold;
             transform: translateX(5px);
         }
+        
+        /* Style spécial pour le bouton déconnexion */
+        .sidebar .nav-link.logout-link {
+            color: #dc3545 !important;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255,255,255,0.3) !important;
+            background: transparent !important;
+            border-radius: 0 !important;
+        }
+        .sidebar .nav-link.logout-link:hover {
+            color: white !important;
+            background: #dc3545 !important;
+            transform: translateX(5px);
+            border-radius: 0 !important;
+            border-top: 1px solid rgba(255,255,255,0.3) !important;
+        }
+        .sidebar .nav-link.logout-link:focus {
+            background: transparent !important;
+            border-radius: 0 !important;
+            border-top: 1px solid rgba(255,255,255,0.3) !important;
+        }
+        .sidebar .nav-link.logout-link i {
+            color: #dc3545 !important;
+        }
+        .sidebar .nav-link.logout-link:hover i {
+            color: white !important;
+        }
         .main-content {
             background-color: var(--flot-bg);
             min-height: 100vh;
-            margin-left: 240px;
+            margin-left: 280px;
             margin-right: auto;
             max-width: 1200px;
             padding-left: 24px;
@@ -107,8 +138,8 @@
         .logo-bandeau {
             background: var(--flot-white);
             border-radius: 50%;
-            width: 110px;
-            height: 110px;
+            width: 120px;
+            height: 120px;
             margin: 24px auto 32px auto;
             box-shadow: 0 2px 8px rgba(32,70,107,0.04);
             display: flex;
@@ -159,6 +190,31 @@
             color: var(--flot-blue-dark) !important;
             font-weight: bold;
         }
+        .offcanvas .nav-link.logout-link {
+            color: #dc3545 !important;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255,255,255,0.3) !important;
+            background: transparent !important;
+            border-radius: 0 !important;
+        }
+        .offcanvas .nav-link.logout-link:hover {
+            color: white !important;
+            background: #dc3545 !important;
+            border-radius: 0 !important;
+            border-top: 1px solid rgba(255,255,255,0.3) !important;
+        }
+        .offcanvas .nav-link.logout-link:focus {
+            background: transparent !important;
+            border-radius: 0 !important;
+            border-top: 1px solid rgba(255,255,255,0.3) !important;
+        }
+        .offcanvas .nav-link.logout-link i {
+            color: #dc3545 !important;
+        }
+        .offcanvas .nav-link.logout-link:hover i {
+            color: white !important;
+        }
         .offcanvas-logo {
             display: flex;
             align-items: center;
@@ -170,6 +226,22 @@
             width: 48px;
             object-fit: contain;
             filter: brightness(0) invert(1); /* logo blanc */
+        }
+        
+        /* Scrollbar personnalisée pour la sidebar */
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.3);
+            border-radius: 3px;
+        }
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.5);
         }
     </style>
     
@@ -206,6 +278,7 @@
                   <li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>
                   <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>
                   <li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>
                   <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-users-cog me-2"></i>Utilisateurs</a></li>
               {% else %}
                   {% set accesses = user.page_accesses|selectattr('can_access')|map(attribute='page_name')|list %}
@@ -216,8 +289,9 @@
                   {% if 'indicateurs' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>{% endif %}
                   {% if 'releve_20' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>{% endif %}
                   {% if 'routines' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>{% endif %}
+                  {% if 'code_magasin' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>{% endif %}
               {% endif %}
-              <li class="nav-item mt-4"><a class="nav-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
+              <li class="nav-item"><a class="nav-link logout-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
             </ul>
           </div>
         </div>
@@ -238,8 +312,9 @@
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-users-cog me-2"></i>Utilisateurs</a></li>
+                                      <li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-users-cog me-2"></i>Utilisateurs</a></li>
                 {% else %}
                     {% set accesses = user.page_accesses|selectattr('can_access')|map(attribute='page_name')|list %}
                     {% if 'index' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>{% endif %}
@@ -249,8 +324,9 @@
                     {% if 'indicateurs' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>{% endif %}
                     {% if 'releve_20' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>{% endif %}
                     {% if 'routines' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>{% endif %}
+                    {% if 'code_magasin' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>{% endif %}
                 {% endif %}
-                <li class="nav-item mt-4"><a class="nav-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
+                <li class="nav-item"><a class="nav-link logout-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
             </ul>
         </div>
     </nav>

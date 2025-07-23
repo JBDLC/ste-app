@@ -142,10 +142,10 @@ class ReponseRoutine(db.Model):
     question_id = db.Column(db.Integer, db.ForeignKey('question_routine.id'), nullable=False)
     reponse = db.Column(db.String(20), nullable=False)  # 'Fait', 'Non Fait', 'Non Applicable'
     commentaire = db.Column(db.Text)
-    date_creation = db.Column(db.Date, default=datetime.utcnow().date)
-    heure_creation = db.Column(db.Time, default=datetime.utcnow().time)
+    date_creation = db.Column(db.Date, default=lambda: datetime.now().date())
+    heure_creation = db.Column(db.Time, default=lambda: datetime.now().time())
     utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -1818,6 +1818,18 @@ def init_db():
         except Exception as e:
             print(f"Erreur lors de la vérification de la migration contenu_photo : {e}")
         
+        # Migration : créer la table code_magasin si elle n'existe pas
+        try:
+            inspector = db.inspect(db.engine)
+            if 'code_magasin' not in inspector.get_table_names():
+                print("Migration : création de la table code_magasin...")
+                db.create_all()  # Cela va créer la table code_magasin
+                print("Table code_magasin créée avec succès")
+            else:
+                print("Table code_magasin déjà présente")
+        except Exception as e:
+            print(f"Erreur lors de la vérification de la table code_magasin : {e}")
+        
         # Créer les sites
         if not Site.query.first():
             smp = Site(nom='SMP', description='Station de traitement des eaux SMP')
@@ -1989,6 +2001,7 @@ PAGE_NAMES = [
     'indicateurs',
     'releve_20',
     'routines',
+    'code_magasin',
     'utilisateurs'  # admin only
 ]
 
@@ -2017,6 +2030,102 @@ def require_page_access(page_name):
             abort(403)
         return decorated_function
     return decorator
+
+def generate_daily_code():
+    """Génère un code de 4 chiffres pour aujourd'hui"""
+    import random
+    aujourd_hui = datetime.now().date()
+    
+    # Vérifier si un code existe déjà pour aujourd'hui
+    code_existant = CodeMagasin.query.filter_by(date=aujourd_hui).first()
+    if code_existant:
+        return code_existant.code
+    
+    # Générer un nouveau code de 4 chiffres
+    code = str(random.randint(1000, 9999))
+    
+    # Créer et sauvegarder le nouveau code
+    nouveau_code = CodeMagasin(code=code, date=aujourd_hui)
+    db.session.add(nouveau_code)
+    db.session.commit()
+    
+    return code
+
+@app.route('/code_magasin')
+@require_page_access('code_magasin')
+def code_magasin():
+    # Générer le code du jour
+    code_actuel = generate_daily_code()
+    
+    # Récupérer les codes du mois en cours
+    aujourd_hui = datetime.now().date()
+    premier_jour_mois = aujourd_hui.replace(day=1)
+    dernier_jour_mois = (premier_jour_mois.replace(month=premier_jour_mois.month % 12 + 1, day=1) - timedelta(days=1)) if premier_jour_mois.month < 12 else premier_jour_mois.replace(year=premier_jour_mois.year + 1, month=1, day=1) - timedelta(days=1)
+    
+    codes_mensuels = CodeMagasin.query.filter(
+        CodeMagasin.date >= premier_jour_mois,
+        CodeMagasin.date <= dernier_jour_mois
+    ).order_by(CodeMagasin.date.desc()).all()
+    
+    # Dictionnaire pour traduire les mois en français
+    mois_francais = {
+        1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril',
+        5: 'Mai', 6: 'Juin', 7: 'Juillet', 8: 'Août',
+        9: 'Septembre', 10: 'Octobre', 11: 'Novembre', 12: 'Décembre'
+    }
+    
+    mois_annee = f"{mois_francais[aujourd_hui.month]} {aujourd_hui.year}"
+    
+    return render_template('code_magasin.html', 
+                         current_code=code_actuel, 
+                         monthly_codes=codes_mensuels,
+                         current_month=mois_annee,
+                         today=aujourd_hui)
+
+@app.route('/api/code_magasin/current')
+@require_page_access('code_magasin')
+def api_current_code():
+    """API pour récupérer le code actuel"""
+    code_actuel = generate_daily_code()
+    return jsonify({
+        'code': code_actuel,
+        'date': datetime.now().date().isoformat()
+    })
+
+@app.route('/api/code_magasin/monthly')
+@require_page_access('code_magasin')
+def api_monthly_codes():
+    """API pour récupérer les codes du mois"""
+    aujourd_hui = datetime.now().date()
+    premier_jour_mois = aujourd_hui.replace(day=1)
+    dernier_jour_mois = (premier_jour_mois.replace(month=premier_jour_mois.month % 12 + 1, day=1) - timedelta(days=1)) if premier_jour_mois.month < 12 else premier_jour_mois.replace(year=premier_jour_mois.year + 1, month=1, day=1) - timedelta(days=1)
+    
+    codes_mensuels = CodeMagasin.query.filter(
+        CodeMagasin.date >= premier_jour_mois,
+        CodeMagasin.date <= dernier_jour_mois
+    ).order_by(CodeMagasin.date.desc()).all()
+    
+    donnees_codes = []
+    for code_entry in codes_mensuels:
+        donnees_codes.append({
+            'date': code_entry.date.strftime('%d/%m/%Y'),
+            'code': code_entry.code,
+            'is_today': code_entry.date == aujourd_hui
+        })
+    
+    # Dictionnaire pour traduire les mois en français
+    mois_francais = {
+        1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril',
+        5: 'Mai', 6: 'Juin', 7: 'Juillet', 8: 'Août',
+        9: 'Septembre', 10: 'Octobre', 11: 'Novembre', 12: 'Décembre'
+    }
+    
+    mois_annee = f"{mois_francais[aujourd_hui.month]} {aujourd_hui.year}"
+    
+    return jsonify({
+        'codes': donnees_codes,
+        'month': mois_annee
+    })
 
 @app.route('/utilisateurs')
 @require_page_access('utilisateurs')
@@ -2165,9 +2274,13 @@ def cleanup_old_data():
             three_years_ago = datetime.now().date() - timedelta(days=1095)
             ReponseRoutine.query.filter(ReponseRoutine.date_creation < three_years_ago).delete()
             
+            # Supprimer les codes magasin de plus de 2 mois
+            deux_mois_avant = datetime.now().date() - timedelta(days=60)
+            codes_supprimes = CodeMagasin.query.filter(CodeMagasin.date < deux_mois_avant).delete()
+            
             db.session.commit()
             
-            print(f"Nettoyage automatique effectué : {len(old_photos)} photos supprimées")
+            print(f"Nettoyage automatique effectué : {len(old_photos)} photos supprimées, {codes_supprimes} codes magasin supprimés")
             return True
             
     except Exception as e:
@@ -2183,14 +2296,16 @@ def check_database_size():
             nb_releves = Releve.query.count()
             nb_photos = PhotoReleve.query.count()
             nb_routines = ReponseRoutine.query.count()
+            nb_codes = CodeMagasin.query.count()
             
             # Estimation de la taille (approximative)
-            estimated_size_mb = (nb_releves * 0.01) + (nb_photos * 2) + (nb_routines * 0.01)
+            estimated_size_mb = (nb_releves * 0.01) + (nb_photos * 2) + (nb_routines * 0.01) + (nb_codes * 0.001)
             
             print(f"📊 Taille estimée de la base : {estimated_size_mb:.2f} MB")
             print(f"   - {nb_releves} relevés")
             print(f"   - {nb_photos} photos")
             print(f"   - {nb_routines} réponses de routine")
+            print(f"   - {nb_codes} codes magasin")
             
             # Afficher un avertissement si > 800MB (sans déclencher automatiquement)
             if estimated_size_mb > 800:
@@ -2216,9 +2331,10 @@ def api_database_status():
         nb_photos = PhotoReleve.query.count()
         nb_routines = ReponseRoutine.query.count()
         nb_users = User.query.count()
+        nb_codes = CodeMagasin.query.count()
         
         # Estimation de la taille
-        estimated_size_mb = (nb_releves * 0.01) + (nb_photos * 2) + (nb_routines * 0.01)
+        estimated_size_mb = (nb_releves * 0.01) + (nb_photos * 2) + (nb_routines * 0.01) + (nb_codes * 0.001)
         
         # Déterminer le type de base de données
         db_uri = app.config['SQLALCHEMY_DATABASE_URI']
@@ -2254,7 +2370,8 @@ def api_database_status():
                 'releves': nb_releves,
                 'photos': nb_photos,
                 'routines': nb_routines,
-                'users': nb_users
+                'users': nb_users,
+                'codes': nb_codes
             }
         })
         
@@ -2346,6 +2463,15 @@ def api_test_email():
         return jsonify({'error': str(e)}), 500
 
 # Modèle pour la configuration email
+class CodeMagasin(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(4), nullable=False)
+    date = db.Column(db.Date, nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<CodeMagasin {self.code} - {self.date}>'
+
 class EmailConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email_address = db.Column(db.String(200), nullable=False, default='admin@ste-releve.com')
