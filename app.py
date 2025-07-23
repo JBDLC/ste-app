@@ -2191,12 +2191,28 @@ def api_modifier_droits(user_id):
     data = request.get_json()
     if not data:
         return jsonify({'error': 'Données JSON manquantes'}), 400
+    
+    print(f"DEBUG: Modification des droits pour l'utilisateur {user_id}: {data}")
+    
     for page, can_access in data.items():
         access = UserPageAccess.query.filter_by(user_id=user.id, page_name=page).first()
         if access:
             access.can_access = bool(can_access)
-    db.session.commit()
-    return jsonify({'success': True})
+            print(f"DEBUG: Mise à jour du droit {page} = {can_access}")
+        else:
+            # Créer l'enregistrement s'il n'existe pas
+            access = UserPageAccess(user_id=user.id, page_name=page, can_access=bool(can_access))
+            db.session.add(access)
+            print(f"DEBUG: Création du droit {page} = {can_access}")
+    
+    try:
+        db.session.commit()
+        print(f"DEBUG: Commit réussi pour l'utilisateur {user_id}")
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"DEBUG: Erreur lors du commit: {e}")
+        return jsonify({'error': f'Erreur lors de la sauvegarde: {str(e)}'}), 500
 
 @app.route('/api/utilisateurs/<int:user_id>', methods=['PUT'])
 @require_page_access('utilisateurs')
