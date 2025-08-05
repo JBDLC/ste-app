@@ -12,26 +12,16 @@
                     <tr>
                         <th>Type</th>
                         <th>Status</th>
-                        <th>% Régularité</th>
-                        {% if user_role == 'admin' %}<th>Remise à zéro</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td>Relevé SMP</td>
                         <td>{% if releves_status.SMP %}<span class="badge bg-success">FAIT</span>{% else %}<span class="badge bg-danger">NON FAIT</span>{% endif %}</td>
-                        <td>{{ releves_regularite['SMP'] }}%</td>
-                        {% if user_role == 'admin' %}
-                        <td><button class="btn btn-sm btn-outline-danger" onclick="resetRegularite('releve', 'Relevé SMP')">Remise à zéro</button></td>
-                        {% endif %}
                     </tr>
                     <tr>
                         <td>Relevé LPZ</td>
                         <td>{% if releves_status.LPZ %}<span class="badge bg-success">FAIT</span>{% else %}<span class="badge bg-danger">NON FAIT</span>{% endif %}</td>
-                        <td>{{ releves_regularite['LPZ'] }}%</td>
-                        {% if user_role == 'admin' %}
-                        <td><button class="btn btn-sm btn-outline-danger" onclick="resetRegularite('releve', 'Relevé LPZ')">Remise à zéro</button></td>
-                        {% endif %}
                     </tr>
                 </tbody>
             </table>
@@ -45,8 +35,6 @@
                     <tr>
                         <th>Routine</th>
                         <th>Status</th>
-                        <th>% Régularité</th>
-                        {% if user_role == 'admin' %}<th>Remise à zéro</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -54,10 +42,6 @@
                     <tr>
                         <td>{{ routine }}</td>
                         <td>{% if routines_status[routine] %}<span class="badge bg-success">FAIT</span>{% else %}<span class="badge bg-danger">NON FAIT</span>{% endif %}</td>
-                        <td>{{ routines_regularite[routine] }}%</td>
-                        {% if user_role == 'admin' %}
-                        <td><button class="btn btn-sm btn-outline-danger" onclick="resetRegularite('routine', '{{ routine }}')">Remise à zéro</button></td>
-                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -65,24 +49,4 @@
         </div>
     </div>
 </div>
-{% if user_role == 'admin' %}
-<script>
-function resetRegularite(type, nom) {
-    if (!confirm('Confirmer la remise à zéro de la régularité pour ' + nom + ' ?')) return;
-    fetch('/api/accueil/reset_regularite', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({type: type, nom: nom})
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Erreur : ' + (data.error || 'inconnue'));
-        }
-    });
-}
-</script>
-{% endif %}
 {% endblock %} 

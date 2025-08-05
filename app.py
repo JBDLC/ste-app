@@ -1448,24 +1448,47 @@ def api_sauvegarder_reponse():
     if not all([formulaire_id, question_id, reponse]):
         return jsonify({'error': 'Données manquantes'}), 400
     
-    # Créer la réponse avec la date d'aujourd'hui (UTC pour éviter les problèmes de fuseau horaire)
-    nouvelle_reponse = ReponseRoutine(
+    # Vérifier si une réponse existe déjà pour cette question aujourd'hui
+    date_aujourdhui = datetime.now().date()
+    reponse_existante = ReponseRoutine.query.filter_by(
         formulaire_id=formulaire_id,
         question_id=question_id,
-        reponse=reponse,
-        commentaire=commentaire,
-        utilisateur_id=current_user.id,
-        date_creation=datetime.utcnow().date(),  # Utiliser UTC pour éviter les problèmes de fuseau horaire
-        heure_creation=datetime.utcnow().time()
-    )
+        date_creation=date_aujourdhui
+    ).first()
     
-    db.session.add(nouvelle_reponse)
-    db.session.commit()
-    
-    return jsonify({
-        'id': nouvelle_reponse.id,
-        'message': 'Réponse enregistrée'
-    })
+    if reponse_existante:
+        # Mettre à jour la réponse existante
+        reponse_existante.reponse = reponse
+        reponse_existante.commentaire = commentaire
+        reponse_existante.utilisateur_id = current_user.id
+        reponse_existante.heure_creation = datetime.now().time()
+        db.session.commit()
+        
+        return jsonify({
+            'id': reponse_existante.id,
+            'message': 'Réponse mise à jour',
+            'updated': True
+        })
+    else:
+        # Créer une nouvelle réponse
+        nouvelle_reponse = ReponseRoutine(
+            formulaire_id=formulaire_id,
+            question_id=question_id,
+            reponse=reponse,
+            commentaire=commentaire,
+            utilisateur_id=current_user.id,
+            date_creation=date_aujourdhui,
+            heure_creation=datetime.now().time()
+        )
+        
+        db.session.add(nouvelle_reponse)
+        db.session.commit()
+        
+        return jsonify({
+            'id': nouvelle_reponse.id,
+            'message': 'Réponse enregistrée',
+            'updated': False
+        })
 
 @app.route('/api/routines/reponses/<date>')
 @login_required
@@ -2803,48 +2826,64 @@ def force_reset_db():
 @app.route('/api/routines/reponses/<int:formulaire_id>/<date>')
 @login_required
 def api_reponses_formulaire_date(formulaire_id, date):
-    """Récupère les réponses pour un formulaire et une date spécifiques"""
     try:
         date_obj = datetime.strptime(date, '%Y-%m-%d').date()
     except ValueError:
         return jsonify({'error': 'Format de date invalide'}), 400
     
-    try:
-        # Récupérer les réponses pour ce formulaire et cette date
-        reponses = db.session.query(ReponseRoutine, QuestionRoutine, FormulaireRoutine).join(
-            QuestionRoutine, ReponseRoutine.question_id == QuestionRoutine.id
-        ).join(
-            FormulaireRoutine, ReponseRoutine.formulaire_id == FormulaireRoutine.id
-        ).filter(
-            ReponseRoutine.formulaire_id == formulaire_id,
-            ReponseRoutine.date_creation == date_obj
-        ).order_by(QuestionRoutine.lieu, QuestionRoutine.id_question).all()
-        
-        result = []
-        for reponse, question, formulaire in reponses:
-            result.append({
-                'id': reponse.id,
-                'formulaire_id': reponse.formulaire_id,
-                'formulaire_nom': formulaire.nom,
-                'question_id': reponse.question_id,
-                'id_question': question.id_question,
-                'lieu': question.lieu,
-                'question': question.question,
-                'reponse': reponse.reponse,
-                'commentaire': reponse.commentaire,
-                'date_creation': reponse.date_creation.isoformat(),
-                'heure_creation': reponse.heure_creation.isoformat() if reponse.heure_creation else None,
-                'photo_path': getattr(reponse, 'photo_path', None)  # Pour compatibilité future
-            })
-        
-        return jsonify({
-            'formulaire_id': formulaire_id,
-            'date': date,
-            'reponses': result
+    reponses = db.session.query(ReponseRoutine, QuestionRoutine).join(
+        QuestionRoutine, ReponseRoutine.question_id == QuestionRoutine.id
+    ).filter(
+        ReponseRoutine.formulaire_id == formulaire_id,
+        ReponseRoutine.date_creation == date_obj
+    ).order_by(ReponseRoutine.heure_creation.asc()).all()
+    
+    result = []
+    for reponse, question in reponses:
+        result.append({
+            'id': reponse.id,
+            'formulaire_id': reponse.formulaire_id,
+            'question_id': reponse.question_id,
+            'id_question': question.id_question,
+            'lieu': question.lieu,
+            'question': question.question,
+            'reponse': reponse.reponse,
+            'commentaire': reponse.commentaire,
+            'date_creation': reponse.date_creation.isoformat(),
+            'heure_creation': reponse.heure_creation.isoformat() if reponse.heure_creation else None
         })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    
+    return jsonify(result)
+
+@app.route('/api/routines/reponses/<int:formulaire_id>/aujourdhui')
+@login_required
+def api_reponses_formulaire_aujourdhui(formulaire_id):
+    """Récupère les réponses d'un formulaire pour aujourd'hui"""
+    date_aujourdhui = datetime.now().date()
+    
+    reponses = db.session.query(ReponseRoutine, QuestionRoutine).join(
+        QuestionRoutine, ReponseRoutine.question_id == QuestionRoutine.id
+    ).filter(
+        ReponseRoutine.formulaire_id == formulaire_id,
+        ReponseRoutine.date_creation == date_aujourdhui
+    ).order_by(ReponseRoutine.heure_creation.asc()).all()
+    
+    result = {}
+    for reponse, question in reponses:
+        result[question.id] = {
+            'id': reponse.id,
+            'formulaire_id': reponse.formulaire_id,
+            'question_id': reponse.question_id,
+            'id_question': question.id_question,
+            'lieu': question.lieu,
+            'question': question.question,
+            'reponse': reponse.reponse,
+            'commentaire': reponse.commentaire,
+            'date_creation': reponse.date_creation.isoformat(),
+            'heure_creation': reponse.heure_creation.isoformat() if reponse.heure_creation else None
+        }
+    
+    return jsonify(result)
 
 if __name__ == '__main__':
     init_db()
