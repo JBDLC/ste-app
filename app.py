@@ -12,6 +12,7 @@ import plotly.utils
 import json
 from werkzeug.utils import secure_filename
 from sqlalchemy import func, text, case, or_
+from sqlalchemy.orm import joinedload
 from typing import Union, Tuple
 from fpdf import FPDF
 from reportlab.pdfgen import canvas
@@ -2509,11 +2510,11 @@ def api_liste_personnel():
     is_manager = current_user.is_manager or current_user.role == 'admin'
     
     if is_manager:
-        # Manager voit tout le personnel
-        personnel_list = Personnel.query.all()
+        # Manager voit tout le personnel - précharger la relation user pour éviter N+1
+        personnel_list = Personnel.query.options(joinedload(Personnel.user)).all()
     else:
         # Personnel voit seulement son profil
-        personnel = Personnel.query.filter_by(user_id=current_user.id).first()
+        personnel = Personnel.query.options(joinedload(Personnel.user)).filter_by(user_id=current_user.id).first()
         personnel_list = [personnel] if personnel else []
     
     data = []
@@ -2664,6 +2665,8 @@ def api_jours_travailles(personnel_id):
             db.session.add(jour)
         
         db.session.commit()
+        # Invalider le cache des jours travaillés pour ce personnel
+        _clear_jours_travailles_cache(personnel_id)
         return jsonify({'success': True})
 
 # API - Demandes de congé
@@ -2674,19 +2677,29 @@ def api_conges():
     
     if request.method == 'GET':
         if is_manager:
-            # Manager voit toutes les demandes
-            demandes = LeaveRequest.query.order_by(LeaveRequest.created_at.desc()).all()
+            # Manager voit toutes les demandes - précharger les relations pour éviter N+1
+            demandes = LeaveRequest.query.options(joinedload(LeaveRequest.personnel)).order_by(LeaveRequest.created_at.desc()).all()
         else:
             # Personnel voit seulement ses demandes
             personnel = Personnel.query.filter_by(user_id=current_user.id).first()
             if not personnel:
                 return jsonify([])
-            demandes = LeaveRequest.query.filter_by(personnel_id=personnel.id).order_by(LeaveRequest.created_at.desc()).all()
+            demandes = LeaveRequest.query.options(joinedload(LeaveRequest.personnel)).filter_by(personnel_id=personnel.id).order_by(LeaveRequest.created_at.desc()).all()
+        
+        # Précharger tous les jours travaillés en une seule requête
+        personnel_ids = list(set([d.personnel_id for d in demandes]))
+        all_jours_travailles = WorkingDays.query.filter(WorkingDays.personnel_id.in_(personnel_ids)).all()
+        jours_par_personnel = {}
+        for jt in all_jours_travailles:
+            if jt.personnel_id not in jours_par_personnel:
+                jours_par_personnel[jt.personnel_id] = {}
+            jours_par_personnel[jt.personnel_id][jt.jour_semaine] = jt.type_journee
         
         data = []
         for d in demandes:
-            # Calculer le nombre de jours
-            nombre_jours = (d.date_fin - d.date_debut).days + 1
+            # Utiliser les jours travaillés préchargés
+            jours_semaine = jours_par_personnel.get(d.personnel_id, {})
+            nombre_jours = calculer_jours_travailles(d.personnel_id, d.date_debut, d.date_fin, jours_semaine)
             data.append({
                 'id': d.id,
                 'personnel_id': d.personnel_id,
@@ -2725,6 +2738,46 @@ def api_conges():
         db.session.add(demande)
         db.session.commit()
         return jsonify({'success': True, 'id': demande.id})
+
+# Cache pour les jours travaillés (évite les requêtes répétées)
+_jours_travailles_cache = {}
+
+def _get_jours_travailles_dict(personnel_id):
+    """Récupère le dictionnaire des jours travaillés avec cache"""
+    if personnel_id not in _jours_travailles_cache:
+        jours_travailles = WorkingDays.query.filter_by(personnel_id=personnel_id).all()
+        _jours_travailles_cache[personnel_id] = {j.jour_semaine: j.type_journee for j in jours_travailles}
+    return _jours_travailles_cache[personnel_id]
+
+def _clear_jours_travailles_cache(personnel_id=None):
+    """Efface le cache des jours travaillés"""
+    if personnel_id:
+        _jours_travailles_cache.pop(personnel_id, None)
+    else:
+        _jours_travailles_cache.clear()
+
+# Fonction pour calculer le nombre de jours travaillés entre deux dates
+def calculer_jours_travailles(personnel_id, date_debut, date_fin, jours_semaine=None):
+    """Calcule le nombre de jours travaillés entre deux dates en tenant compte des jours travaillés définis"""
+    # Utiliser le cache si jours_semaine n'est pas fourni
+    if jours_semaine is None:
+        jours_semaine = _get_jours_travailles_dict(personnel_id)
+    
+    # Si aucun jour travaillé n'est défini, compter tous les jours (comportement par défaut)
+    if not jours_semaine:
+        return (date_fin - date_debut).days + 1
+    
+    # Compter uniquement les jours travaillés
+    nombre_jours = 0
+    current_date = date_debut
+    while current_date <= date_fin:
+        jour_semaine = current_date.weekday()  # 0=lundi, 6=dimanche
+        # Si ce jour de la semaine est un jour travaillé, l'ajouter au compte
+        if jour_semaine in jours_semaine:
+            nombre_jours += 1
+        current_date += timedelta(days=1)
+    
+    return nombre_jours
 
 # Fonction pour générer le PDF de congé en utilisant le template vierge
 def generer_pdf_conge(demande):
@@ -2819,8 +2872,10 @@ def generer_pdf_conge(demande):
         }
         type_label = type_mapping.get(demande.type_conge, demande.type_conge)
         
-        # Calculer le nombre de jours
-        nombre_jours = (demande.date_fin - demande.date_debut).days + 1
+        # Calculer le nombre de jours travaillés (en excluant les jours non travaillés)
+        # Utiliser le cache pour éviter les requêtes répétées
+        jours_semaine = _get_jours_travailles_dict(demande.personnel_id)
+        nombre_jours = calculer_jours_travailles(demande.personnel_id, demande.date_debut, demande.date_fin, jours_semaine)
         
         # Dates formatées
         date_debut_str = demande.date_debut.strftime('%d/%m/%Y')
@@ -3294,6 +3349,9 @@ def api_absences():
                     User.role != 'admin'
                 )
             
+            # Précharger les relations personnel pour éviter N+1
+            base_query = base_query.options(joinedload(Absence.personnel))
+            
             if personnel_id:
                 absences = base_query.filter_by(personnel_id=personnel_id).all()
             elif is_manager:
@@ -3377,6 +3435,11 @@ def api_absences():
                 Formation.date_fin >= today,
                 Formation.date_debut <= dernier_jour_mois_suivant
             )
+            
+            # Précharger les relations pour éviter N+1
+            base_query_absences = base_query_absences.options(joinedload(Absence.personnel))
+            base_query_conges = base_query_conges.options(joinedload(LeaveRequest.personnel))
+            base_query_formations = base_query_formations.options(joinedload(Formation.personnel))
             
             if personnel_id:
                 absences = base_query_absences.filter_by(personnel_id=personnel_id).all()
@@ -3508,6 +3571,47 @@ def api_planning(personnel_id):
     premier_jour = datetime(annee, mois, 1).date()
     dernier_jour = (premier_jour.replace(month=premier_jour.month % 12 + 1, day=1) - timedelta(days=1)) if premier_jour.month < 12 else premier_jour.replace(year=premier_jour.year + 1, month=1, day=1) - timedelta(days=1)
     
+    # OPTIMISATION : Précharger toutes les données en une seule requête par type
+    all_conges = LeaveRequest.query.filter(
+        LeaveRequest.personnel_id == personnel_id,
+        LeaveRequest.statut.in_(['accepte', 'en_attente']),
+        LeaveRequest.date_debut <= dernier_jour,
+        LeaveRequest.date_fin >= premier_jour
+    ).all()
+    conges_par_date = {}
+    for c in all_conges:
+        date_conge = max(c.date_debut, premier_jour)
+        while date_conge <= min(c.date_fin, dernier_jour):
+            if date_conge not in conges_par_date:
+                conges_par_date[date_conge] = c
+            date_conge += timedelta(days=1)
+    
+    all_absences = Absence.query.filter(
+        Absence.personnel_id == personnel_id,
+        Absence.date_debut <= dernier_jour,
+        Absence.date_fin >= premier_jour
+    ).all()
+    absences_par_date = {}
+    for a in all_absences:
+        date_absence = max(a.date_debut, premier_jour)
+        while date_absence <= min(a.date_fin, dernier_jour):
+            if date_absence not in absences_par_date:
+                absences_par_date[date_absence] = a
+            date_absence += timedelta(days=1)
+    
+    all_formations = Formation.query.filter(
+        Formation.personnel_id == personnel_id,
+        Formation.date_debut <= dernier_jour,
+        Formation.date_fin >= premier_jour
+    ).all()
+    formations_par_date = {}
+    for f in all_formations:
+        date_formation = max(f.date_debut, premier_jour)
+        while date_formation <= min(f.date_fin, dernier_jour):
+            if date_formation not in formations_par_date:
+                formations_par_date[date_formation] = f
+            date_formation += timedelta(days=1)
+    
     planning = []
     current_date = premier_jour
     
@@ -3517,27 +3621,10 @@ def api_planning(personnel_id):
         # Déterminer le type de journée
         type_journee = jours_semaine.get(jour_semaine, None)
         
-        # Vérifier les congés (acceptés et en attente)
-        conge = LeaveRequest.query.filter(
-            LeaveRequest.personnel_id == personnel_id,
-            LeaveRequest.statut.in_(['accepte', 'en_attente']),
-            LeaveRequest.date_debut <= current_date,
-            LeaveRequest.date_fin >= current_date
-        ).first()
-        
-        # Vérifier les absences
-        absence = Absence.query.filter(
-            Absence.personnel_id == personnel_id,
-            Absence.date_debut <= current_date,
-            Absence.date_fin >= current_date
-        ).first()
-        
-        # Vérifier les formations
-        formation = Formation.query.filter(
-            Formation.personnel_id == personnel_id,
-            Formation.date_debut <= current_date,
-            Formation.date_fin >= current_date
-        ).first()
+        # Récupérer depuis les dictionnaires préchargés (pas de requête SQL)
+        conge = conges_par_date.get(current_date)
+        absence = absences_par_date.get(current_date)
+        formation = formations_par_date.get(current_date)
         
         jour_data = {
             'date': current_date.isoformat(),
@@ -3577,64 +3664,105 @@ def api_planning_global():
         
         # Récupérer tous les personnels
         if site_id:
-            # Filtrer par équipe si site_id est fourni
             personnel_list = Personnel.query.filter_by(site_id=site_id).all()
         else:
             personnel_list = Personnel.query.all()
         
-        # Générer le planning pour chaque personnel
+        if not personnel_list:
+            return jsonify([])
+        
+        personnel_ids = [p.id for p in personnel_list]
+        
+        # Calculer les dates du mois
+        premier_jour = datetime(annee, mois, 1).date()
+        dernier_jour = (premier_jour.replace(month=premier_jour.month % 12 + 1, day=1) - timedelta(days=1)) if premier_jour.month < 12 else premier_jour.replace(year=premier_jour.year + 1, month=1, day=1) - timedelta(days=1)
+        
+        # OPTIMISATION : Précharger toutes les données en une seule requête par type
+        # 1. Tous les jours travaillés
+        all_jours_travailles = WorkingDays.query.filter(WorkingDays.personnel_id.in_(personnel_ids)).all()
+        jours_par_personnel = {}
+        for jt in all_jours_travailles:
+            if jt.personnel_id not in jours_par_personnel:
+                jours_par_personnel[jt.personnel_id] = {}
+            jours_par_personnel[jt.personnel_id][jt.jour_semaine] = jt.type_journee
+        
+        # 2. Tous les congés du mois
+        all_conges = LeaveRequest.query.filter(
+            LeaveRequest.personnel_id.in_(personnel_ids),
+            LeaveRequest.statut.in_(['accepte', 'en_attente']),
+            LeaveRequest.date_debut <= dernier_jour,
+            LeaveRequest.date_fin >= premier_jour
+        ).all()
+        conges_par_personnel_date = {}
+        for c in all_conges:
+            if c.personnel_id not in conges_par_personnel_date:
+                conges_par_personnel_date[c.personnel_id] = {}
+            # Créer une entrée pour chaque jour du congé
+            date_conge = c.date_debut
+            while date_conge <= c.date_fin:
+                if date_conge not in conges_par_personnel_date[c.personnel_id]:
+                    conges_par_personnel_date[c.personnel_id][date_conge] = c
+                date_conge += timedelta(days=1)
+        
+        # 3. Toutes les absences du mois
+        try:
+            all_absences = Absence.query.filter(
+                Absence.personnel_id.in_(personnel_ids),
+                or_(Absence.statut == 'validee', Absence.statut == None),
+                Absence.date_debut <= dernier_jour,
+                Absence.date_fin >= premier_jour
+            ).all()
+        except:
+            all_absences = Absence.query.filter(
+                Absence.personnel_id.in_(personnel_ids),
+                Absence.date_debut <= dernier_jour,
+                Absence.date_fin >= premier_jour
+            ).all()
+        absences_par_personnel_date = {}
+        for a in all_absences:
+            if a.personnel_id not in absences_par_personnel_date:
+                absences_par_personnel_date[a.personnel_id] = {}
+            date_absence = a.date_debut
+            while date_absence <= a.date_fin:
+                if date_absence not in absences_par_personnel_date[a.personnel_id]:
+                    absences_par_personnel_date[a.personnel_id][date_absence] = a
+                date_absence += timedelta(days=1)
+        
+        # 4. Toutes les formations du mois
+        all_formations = Formation.query.filter(
+            Formation.personnel_id.in_(personnel_ids),
+            Formation.date_debut <= dernier_jour,
+            Formation.date_fin >= premier_jour
+        ).all()
+        formations_par_personnel_date = {}
+        for f in all_formations:
+            if f.personnel_id not in formations_par_personnel_date:
+                formations_par_personnel_date[f.personnel_id] = {}
+            date_formation = f.date_debut
+            while date_formation <= f.date_fin:
+                if date_formation not in formations_par_personnel_date[f.personnel_id]:
+                    formations_par_personnel_date[f.personnel_id][date_formation] = f
+                date_formation += timedelta(days=1)
+        
+        # Générer le planning pour chaque personnel (sans requêtes SQL dans la boucle)
         result = []
         for personnel in personnel_list:
-            # Récupérer les jours travaillés
-            jours_travailles = WorkingDays.query.filter_by(personnel_id=personnel.id).all()
-            jours_semaine = {j.jour_semaine: j.type_journee for j in jours_travailles}
-            
-            # Générer le planning du mois
-            premier_jour = datetime(annee, mois, 1).date()
-            dernier_jour = (premier_jour.replace(month=premier_jour.month % 12 + 1, day=1) - timedelta(days=1)) if premier_jour.month < 12 else premier_jour.replace(year=premier_jour.year + 1, month=1, day=1) - timedelta(days=1)
+            jours_semaine = jours_par_personnel.get(personnel.id, {})
+            conges_personnel = conges_par_personnel_date.get(personnel.id, {})
+            absences_personnel = absences_par_personnel_date.get(personnel.id, {})
+            formations_personnel = formations_par_personnel_date.get(personnel.id, {})
             
             planning = []
             current_date = premier_jour
             
             while current_date <= dernier_jour:
                 jour_semaine = current_date.weekday()  # 0=lundi, 6=dimanche
-                
-                # Déterminer le type de journée
                 type_journee = jours_semaine.get(jour_semaine, None)
                 
-                # Vérifier les congés (acceptés et en attente)
-                conge = LeaveRequest.query.filter(
-                    LeaveRequest.personnel_id == personnel.id,
-                    LeaveRequest.statut.in_(['accepte', 'en_attente']),
-                    LeaveRequest.date_debut <= current_date,
-                    LeaveRequest.date_fin >= current_date
-                ).first()
-                
-                # Vérifier les absences validées (ou sans statut pour compatibilité)
-                try:
-                    absence = Absence.query.filter(
-                        Absence.personnel_id == personnel.id,
-                        or_(
-                            Absence.statut == 'validee',
-                            Absence.statut == None
-                        ),
-                        Absence.date_debut <= current_date,
-                        Absence.date_fin >= current_date
-                    ).first()
-                except:
-                    # Si le champ statut n'existe pas, filtrer seulement par date
-                    absence = Absence.query.filter(
-                        Absence.personnel_id == personnel.id,
-                        Absence.date_debut <= current_date,
-                        Absence.date_fin >= current_date
-                    ).first()
-                
-                # Vérifier les formations
-                formation = Formation.query.filter(
-                    Formation.personnel_id == personnel.id,
-                    Formation.date_debut <= current_date,
-                    Formation.date_fin >= current_date
-                ).first()
+                # Récupérer depuis les dictionnaires préchargés (pas de requête SQL)
+                conge = conges_personnel.get(current_date)
+                absence = absences_personnel.get(current_date)
+                formation = formations_personnel.get(current_date)
                 
                 jour_data = {
                     'date': current_date.isoformat(),
@@ -3714,9 +3842,13 @@ def api_utilisateurs_disponibles():
     if not is_manager:
         return jsonify({'error': 'Accès non autorisé'}), 403
     
-    # Utilisateurs qui n'ont pas encore de profil personnel
-    personnel_user_ids = [p.user_id for p in Personnel.query.all()]
-    users = User.query.filter(~User.id.in_(personnel_user_ids)).all()
+    # Utilisateurs qui n'ont pas encore de profil personnel - optimisé
+    personnel_user_ids = db.session.query(Personnel.user_id).filter(Personnel.user_id.isnot(None)).all()
+    personnel_user_ids = [uid[0] for uid in personnel_user_ids]  # Extraire les IDs de la liste de tuples
+    if personnel_user_ids:
+        users = User.query.filter(~User.id.in_(personnel_user_ids)).all()
+    else:
+        users = User.query.all()
     
     data = [{
         'id': u.id,
