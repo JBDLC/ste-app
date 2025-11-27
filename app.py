@@ -114,7 +114,8 @@ def _init_db_on_startup():
                         if 'sqlite' in str(db.engine.url):
                             conn.execute(text('ALTER TABLE user ADD COLUMN is_manager INTEGER DEFAULT 0'))
                         else:
-                            conn.execute(text('ALTER TABLE user ADD COLUMN is_manager BOOLEAN DEFAULT FALSE'))
+                            # PostgreSQL : user est un mot réservé, il faut utiliser des guillemets
+                            conn.execute(text('ALTER TABLE "user" ADD COLUMN is_manager BOOLEAN DEFAULT FALSE'))
                         conn.commit()
                     print("✅ Colonne is_manager ajoutée")
             except Exception as e:
@@ -2053,8 +2054,8 @@ def init_db():
                         if 'sqlite' in str(db.engine.url):
                             conn.execute(text('ALTER TABLE user ADD COLUMN is_manager INTEGER DEFAULT 0'))
                         else:
-                            # PostgreSQL utilise BOOLEAN
-                            conn.execute(text('ALTER TABLE user ADD COLUMN is_manager BOOLEAN DEFAULT FALSE'))
+                            # PostgreSQL : user est un mot réservé, il faut utiliser des guillemets
+                            conn.execute(text('ALTER TABLE "user" ADD COLUMN is_manager BOOLEAN DEFAULT FALSE'))
                         conn.commit()
                     print("Colonne is_manager ajoutée avec succès")
                 except Exception as e:
