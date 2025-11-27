@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Relevés{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <ul class="nav nav-tabs mb-4" id="relevesTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="smp-tab" data-bs-toggle="tab" data-bs-target="#smp" type="button" role="tab" aria-controls="smp" aria-selected="true">
+                SMP
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="lpz-tab" data-bs-toggle="tab" data-bs-target="#lpz" type="button" role="tab" aria-controls="lpz" aria-selected="false">
+                LPZ
+            </button>
+        </li>
+    </ul>
+    
+    <div class="tab-content" id="relevesTabContent">
+        <div class="tab-pane fade show active" id="smp" role="tabpanel" aria-labelledby="smp-tab">
+            <iframe src="{{ url_for('releve_site', site_id=1) }}" style="width: 100%; height: calc(100vh - 200px); border: none;"></iframe>
+        </div>
+        <div class="tab-pane fade" id="lpz" role="tabpanel" aria-labelledby="lpz-tab">
+            <iframe src="{{ url_for('releve_site', site_id=2) }}" style="width: 100%; height: calc(100vh - 200px); border: none;"></iframe>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+
+
+
+

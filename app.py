@@ -11,9 +11,18 @@ import plotly.graph_objs as go
 import plotly.utils
 import json
 from werkzeug.utils import secure_filename
-from sqlalchemy import func, text, case
+from sqlalchemy import func, text, case, or_
 from typing import Union, Tuple
 from fpdf import FPDF
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm, mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from PyPDF2 import PdfReader, PdfWriter
+from reportlab.pdfgen.canvas import Canvas
+from reportlab.lib.utils import ImageReader
+from PIL import Image
 import matplotlib.pyplot as plt
 import io
 import tempfile
@@ -75,8 +84,164 @@ if os.environ.get('DATABASE_URL') and ('postgresql' in app.config['SQLALCHEMY_DA
         print(f"   🔧 Vérifiez que la base 'ste-app-db' existe sur Render!")
         print(f"   🔧 Vérifiez que DATABASE_URL est correctement configuré!")
         
-# Créer le dossier uploads s'il n'existe pas
+# Créer les dossiers nécessaires s'ils n'existent pas
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'signatures'), exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'conges'), exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'personnel'), exist_ok=True)
+# Dossier pour le template PDF
+TEMPLATE_PDF_FOLDER = os.path.join('static', 'templates')
+os.makedirs(TEMPLATE_PDF_FOLDER, exist_ok=True)
+# Essayer d'abord avec underscores, puis avec tirets
+TEMPLATE_PDF_PATH = os.path.join(TEMPLATE_PDF_FOLDER, 'formulaire_absence_vierge.pdf')
+if not os.path.exists(TEMPLATE_PDF_PATH):
+    TEMPLATE_PDF_PATH = os.path.join(TEMPLATE_PDF_FOLDER, 'formulaire-absence-vierge.pdf')
+
+# Initialiser la base de données au démarrage (migrations automatiques)
+# Cette fonction sera définie plus tard, mais on l'appelle ici pour les migrations
+def _init_db_on_startup():
+    """Initialise la base de données et exécute les migrations au démarrage"""
+    try:
+        with app.app_context():
+            # Vérifier et ajouter la colonne is_manager si nécessaire
+            try:
+                inspector = db.inspect(db.engine)
+                columns = [col['name'] for col in inspector.get_columns('user')]
+                
+                if 'is_manager' not in columns:
+                    print("🔄 Migration: Ajout de la colonne is_manager...")
+                    with db.engine.connect() as conn:
+                        if 'sqlite' in str(db.engine.url):
+                            conn.execute(text('ALTER TABLE user ADD COLUMN is_manager INTEGER DEFAULT 0'))
+                        else:
+                            conn.execute(text('ALTER TABLE user ADD COLUMN is_manager BOOLEAN DEFAULT FALSE'))
+                        conn.commit()
+                    print("✅ Colonne is_manager ajoutée")
+            except Exception as e:
+                # Si la table user n'existe pas encore, on continue
+                if 'no such table' not in str(e).lower():
+                    print(f"⚠️ Migration is_manager: {e}")
+            
+            # Créer les tables de gestion du personnel si nécessaire
+            try:
+                inspector = db.inspect(db.engine)
+                table_names = inspector.get_table_names()
+                tables_to_create = ['personnel', 'working_days', 'leave_request', 'personnel_document', 'absence', 'formation', 'formation_document', 'manager_signature', 'leave_request_document']
+                tables_missing = [t for t in tables_to_create if t not in table_names]
+                
+                if tables_missing:
+                    print(f"🔄 Migration: Création des tables de gestion du personnel...")
+                    db.create_all()
+                    print(f"✅ Tables créées: {', '.join(tables_missing)}")
+            except Exception as e:
+                print(f"⚠️ Migration tables personnel: {e}")
+            
+            # Migration : ajouter la colonne site_id à la table personnel si nécessaire
+            try:
+                inspector = db.inspect(db.engine)
+                table_names = inspector.get_table_names()
+                if 'personnel' in table_names:
+                    columns = [col['name'] for col in inspector.get_columns('personnel')]
+                    if 'site_id' not in columns:
+                        print("🔄 Migration: Ajout de la colonne site_id à la table personnel...")
+                        with db.engine.connect() as conn:
+                            if 'sqlite' in str(db.engine.url):
+                                conn.execute(text('ALTER TABLE personnel ADD COLUMN site_id INTEGER'))
+                            else:
+                                conn.execute(text('ALTER TABLE personnel ADD COLUMN site_id INTEGER REFERENCES site(id)'))
+                            conn.commit()
+                        print("✅ Colonne site_id ajoutée à la table personnel")
+            except Exception as e:
+                if 'no such table' not in str(e).lower() and 'does not exist' not in str(e).lower():
+                    print(f"⚠️ Migration site_id personnel: {e}")
+            
+            # Migration : ajouter la colonne societe à la table personnel si nécessaire
+            try:
+                inspector = db.inspect(db.engine)
+                table_names = inspector.get_table_names()
+                if 'personnel' in table_names:
+                    columns = [col['name'] for col in inspector.get_columns('personnel')]
+                    if 'societe' not in columns:
+                        print("🔄 Migration: Ajout de la colonne societe à la table personnel...")
+                        with db.engine.connect() as conn:
+                            conn.execute(text('ALTER TABLE personnel ADD COLUMN societe VARCHAR(100)'))
+                            conn.commit()
+                        print("✅ Colonne societe ajoutée à la table personnel")
+            except Exception as e:
+                if 'no such table' not in str(e).lower() and 'does not exist' not in str(e).lower():
+                    print(f"⚠️ Migration societe personnel: {e}")
+            
+            # Migration : ajouter la colonne statut à la table absence si nécessaire
+            try:
+                inspector = db.inspect(db.engine)
+                if 'absence' in inspector.get_table_names():
+                    columns = [col['name'] for col in inspector.get_columns('absence')]
+                    
+                    if 'statut' not in columns:
+                        print("🔄 Migration: Ajout de la colonne statut à la table absence...")
+                        try:
+                            with db.engine.connect() as conn:
+                                if 'sqlite' in str(db.engine.url):
+                                    conn.execute(text('ALTER TABLE absence ADD COLUMN statut VARCHAR(20) DEFAULT "en_attente"'))
+                                    conn.execute(text('UPDATE absence SET statut = "en_attente" WHERE statut IS NULL'))
+                                else:
+                                    conn.execute(text('ALTER TABLE absence ADD COLUMN statut VARCHAR(20) DEFAULT \'en_attente\''))
+                                    conn.execute(text("UPDATE absence SET statut = 'en_attente' WHERE statut IS NULL"))
+                                conn.commit()
+                            print("✅ Colonne statut ajoutée à la table absence")
+                        except Exception as e:
+                            print(f"⚠️ Migration statut absence: {e}")
+                    else:
+                        # Mettre à jour les absences existantes qui n'ont pas de statut
+                        try:
+                            with db.engine.connect() as conn:
+                                if 'sqlite' in str(db.engine.url):
+                                    conn.execute(text('UPDATE absence SET statut = "en_attente" WHERE statut IS NULL'))
+                                else:
+                                    conn.execute(text("UPDATE absence SET statut = 'en_attente' WHERE statut IS NULL"))
+                                conn.commit()
+                        except Exception as e:
+                            print(f"⚠️ Mise à jour statut absence existantes: {e}")
+            except Exception as e:
+                print(f"Erreur lors de la vérification de la colonne statut absence: {e}")
+            
+            # Migration : ajouter les colonnes type_formation et date_fin_validite à la table formation si nécessaire
+            try:
+                inspector = db.inspect(db.engine)
+                if 'formation' in inspector.get_table_names():
+                    columns = [col['name'] for col in inspector.get_columns('formation')]
+                    
+                    if 'type_formation' not in columns:
+                        print("🔄 Migration: Ajout de la colonne type_formation à la table formation...")
+                        try:
+                            with db.engine.connect() as conn:
+                                if 'sqlite' in str(db.engine.url):
+                                    conn.execute(text('ALTER TABLE formation ADD COLUMN type_formation VARCHAR(20) DEFAULT "demande"'))
+                                    conn.execute(text('UPDATE formation SET type_formation = "demande" WHERE type_formation IS NULL'))
+                                else:
+                                    conn.execute(text('ALTER TABLE formation ADD COLUMN type_formation VARCHAR(20) DEFAULT \'demande\''))
+                                    conn.execute(text("UPDATE formation SET type_formation = 'demande' WHERE type_formation IS NULL"))
+                                conn.commit()
+                            print("✅ Colonne type_formation ajoutée à la table formation")
+                        except Exception as e:
+                            print(f"⚠️ Migration type_formation: {e}")
+                    
+                    if 'date_fin_validite' not in columns:
+                        print("🔄 Migration: Ajout de la colonne date_fin_validite à la table formation...")
+                        try:
+                            with db.engine.connect() as conn:
+                                conn.execute(text('ALTER TABLE formation ADD COLUMN date_fin_validite DATE'))
+                                conn.commit()
+                            print("✅ Colonne date_fin_validite ajoutée à la table formation")
+                        except Exception as e:
+                            print(f"⚠️ Migration date_fin_validite: {e}")
+            except Exception as e:
+                print(f"Erreur lors de la vérification des colonnes formation: {e}")
+    except Exception as e:
+        print(f"⚠️ Erreur lors de l'initialisation de la base de données: {e}")
+
+# Exécuter les migrations au démarrage
+_init_db_on_startup()
 
 # Modèles de base de données
 class User(UserMixin, db.Model):
@@ -84,7 +249,9 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)  # Augmenté de 120 à 255
     role = db.Column(db.String(20), default='operateur')  # operateur, chef_equipe, admin
+    is_manager = db.Column(db.Boolean, default=False)  # Indique si l'utilisateur est manager pour la gestion du personnel
     page_accesses = relationship('UserPageAccess', back_populates='user', cascade='all, delete-orphan')
+    personnel = relationship('Personnel', foreign_keys='Personnel.user_id', back_populates='user', uselist=False)
 
 class Site(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -102,17 +269,18 @@ class TypeReleve(db.Model):
 
 class Releve(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.Date, nullable=False)
-    type_releve_id = db.Column(db.Integer, db.ForeignKey('type_releve.id'), nullable=False)
+    # Index sur la date et le type pour accélérer les filtres fréquents
+    date = db.Column(db.Date, nullable=False, index=True)
+    type_releve_id = db.Column(db.Integer, db.ForeignKey('type_releve.id'), nullable=False, index=True)
     valeur = db.Column(db.Float, nullable=False)
-    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
     commentaire = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class PhotoReleve(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.Date, nullable=False)
-    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False, index=True)
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False, index=True)
     nom_debitmetre = db.Column(db.String(100), nullable=False)
     fichier_photo = db.Column(db.String(200), nullable=False)  # Nom du fichier pour compatibilité
     contenu_photo = db.Column(db.LargeBinary, nullable=True)  # Contenu binaire de la photo
@@ -124,25 +292,25 @@ class PhotoReleve(db.Model):
 # Modèles pour les routines d'exploitation
 class FormulaireRoutine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    nom = db.Column(db.String(100), unique=True, nullable=False)
+    nom = db.Column(db.String(100), unique=True, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class QuestionRoutine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    formulaire_id = db.Column(db.Integer, db.ForeignKey('formulaire_routine.id'), nullable=False)
-    id_question = db.Column(db.String(50), nullable=False)
-    lieu = db.Column(db.String(100), nullable=False)
+    formulaire_id = db.Column(db.Integer, db.ForeignKey('formulaire_routine.id'), nullable=False, index=True)
+    id_question = db.Column(db.String(50), nullable=False, index=True)
+    lieu = db.Column(db.String(100), nullable=False, index=True)
     question = db.Column(db.Text, nullable=False)
     ordre = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class ReponseRoutine(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    formulaire_id = db.Column(db.Integer, db.ForeignKey('formulaire_routine.id'), nullable=False)
-    question_id = db.Column(db.Integer, db.ForeignKey('question_routine.id'), nullable=False)
+    formulaire_id = db.Column(db.Integer, db.ForeignKey('formulaire_routine.id'), nullable=False, index=True)
+    question_id = db.Column(db.Integer, db.ForeignKey('question_routine.id'), nullable=False, index=True)
     reponse = db.Column(db.String(20), nullable=False)  # 'Fait', 'Non Fait', 'Non Applicable'
     commentaire = db.Column(db.Text)
-    date_creation = db.Column(db.Date, default=lambda: datetime.now().date())
+    date_creation = db.Column(db.Date, default=lambda: datetime.now().date(), index=True)
     heure_creation = db.Column(db.Time, default=lambda: datetime.now().time())
     utilisateur_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
@@ -215,9 +383,9 @@ PAGE_REDIRECTS = [
     ('releve_site_lpz', lambda: url_for('releve_site', site_id=2)),
     ('historique', lambda: url_for('historique')),
     ('indicateurs', lambda: url_for('indicateurs')),
-    ('releve_20', lambda: url_for('releve_20')),
     ('routines', lambda: url_for('routines')),
-    ('utilisateurs', lambda: url_for('utilisateurs'))
+    ('utilisateurs', lambda: url_for('utilisateurs')),
+    ('perso', lambda: url_for('perso'))
 ]
 
 def first_allowed_page(user):
@@ -254,6 +422,11 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('login'))
+
+@app.route('/releves')
+@login_required
+def releves():
+    return render_template('releves.html')
 
 @app.route('/releve/<int:site_id>')
 @login_required
@@ -326,6 +499,12 @@ def ajouter_releve():
     backup_database()  # Sauvegarde automatique après création/modification
     return jsonify({'success': True})
 
+@app.route('/valeurs')
+@login_required
+def valeurs():
+    sites = Site.query.all()
+    return render_template('valeurs.html', sites=sites)
+
 @app.route('/historique')
 @login_required
 def historique():
@@ -337,20 +516,28 @@ def historique():
 def get_historique(site_id):
     date_debut = request.args.get('date_debut')
     date_fin = request.args.get('date_fin')
-    
-    query = db.session.query(Releve, TypeReleve).join(TypeReleve).filter(TypeReleve.site_id == site_id)
+
+    # Utiliser une jointure avec User pour éviter un N+1 (une requête par relevé)
+    query = (
+        db.session.query(
+            Releve,
+            TypeReleve,
+            User.username.label('utilisateur_username')
+        )
+        .join(TypeReleve, Releve.type_releve_id == TypeReleve.id)
+        .outerjoin(User, Releve.utilisateur_id == User.id)
+        .filter(TypeReleve.site_id == site_id)
+    )
     
     if date_debut:
         query = query.filter(Releve.date >= datetime.strptime(date_debut, '%Y-%m-%d').date())
     if date_fin:
         query = query.filter(Releve.date <= datetime.strptime(date_fin, '%Y-%m-%d').date())
-    
     # Tri : date décroissante, puis id de TypeReleve croissant (ordre métier)
     releves = query.order_by(Releve.date.desc(), TypeReleve.id.asc()).all()
-    
+
     result = []
-    for releve, type_releve in releves:
-        user = db.session.get(User, releve.utilisateur_id)
+    for releve, type_releve, utilisateur_username in releves:
         result.append({
             'id': releve.id,
             'date': releve.date.strftime('%Y-%m-%d'),
@@ -358,7 +545,7 @@ def get_historique(site_id):
             'valeur': releve.valeur,
             'unite': type_releve.unite,
             'commentaire': releve.commentaire,
-            'utilisateur': user.username if user else 'Inconnu'
+            'utilisateur': utilisateur_username or 'Inconnu'
         })
     
     return jsonify(result)
@@ -1853,6 +2040,47 @@ def init_db():
         except Exception as e:
             print(f"Erreur lors de la vérification de la table code_magasin : {e}")
         
+        # Migration : ajouter la colonne is_manager à la table user si nécessaire
+        try:
+            inspector = db.inspect(db.engine)
+            columns = [col['name'] for col in inspector.get_columns('user')]
+            
+            if 'is_manager' not in columns:
+                print("Migration : ajout de la colonne is_manager...")
+                try:
+                    with db.engine.connect() as conn:
+                        # SQLite utilise INTEGER pour les booléens
+                        if 'sqlite' in str(db.engine.url):
+                            conn.execute(text('ALTER TABLE user ADD COLUMN is_manager INTEGER DEFAULT 0'))
+                        else:
+                            # PostgreSQL utilise BOOLEAN
+                            conn.execute(text('ALTER TABLE user ADD COLUMN is_manager BOOLEAN DEFAULT FALSE'))
+                        conn.commit()
+                    print("Colonne is_manager ajoutée avec succès")
+                except Exception as e:
+                    print(f"Erreur lors de l'ajout de la colonne is_manager: {e}")
+            else:
+                print("Colonne is_manager déjà présente")
+        except Exception as e:
+            print(f"Erreur lors de la vérification de la colonne is_manager: {e}")
+        
+        # Migration : créer les tables pour la gestion du personnel si elles n'existent pas
+        try:
+            inspector = db.inspect(db.engine)
+            table_names = inspector.get_table_names()
+            
+            tables_to_create = ['personnel', 'working_days', 'leave_request', 'personnel_document', 'absence', 'formation', 'formation_document', 'manager_signature', 'leave_request_document']
+            tables_missing = [t for t in tables_to_create if t not in table_names]
+            
+            if tables_missing:
+                print(f"Migration : création des tables de gestion du personnel: {', '.join(tables_missing)}...")
+                db.create_all()  # Cela va créer toutes les tables manquantes
+                print(f"Tables créées avec succès: {', '.join(tables_missing)}")
+            else:
+                print("Tables de gestion du personnel déjà présentes")
+        except Exception as e:
+            print(f"Erreur lors de la vérification des tables de gestion du personnel: {e}")
+        
         # Créer les sites
         if not Site.query.first():
             smp = Site(nom='SMP', description='Station de traitement des eaux SMP')
@@ -2022,10 +2250,10 @@ PAGE_NAMES = [
     'releve_site_lpz',
     'historique',
     'indicateurs',
-    'releve_20',
     'routines',
     'code_magasin',
-    'utilisateurs'  # admin only
+    'utilisateurs',  # admin only
+    'perso'  # gestion du personnel
 ]
 
 # Modèle pour les droits d'accès par page
@@ -2168,6 +2396,7 @@ def api_utilisateurs():
                 'id': user.id,
                 'username': user.username,
                 'role': user.role,
+                'is_manager': user.is_manager,
                 'page_accesses': {a.page_name: a.can_access for a in user.page_accesses}
             })
         return jsonify(data)
@@ -2178,6 +2407,7 @@ def api_utilisateurs():
         username = data.get('username')
         password = data.get('password')
         role = data.get('role', 'operateur')
+        is_manager = data.get('is_manager', False)
         if not username or not password:
             return jsonify({'error': 'Champs manquants'}), 400
         if User.query.filter_by(username=username).first():
@@ -2186,6 +2416,7 @@ def api_utilisateurs():
         user.username = username
         user.password_hash = generate_password_hash(password)
         user.role = role
+        user.is_manager = bool(is_manager)
         db.session.add(user)
         db.session.commit()
         # Initialiser les droits (admin a tout, autres rien)
@@ -2247,6 +2478,7 @@ def api_modifier_utilisateur(user_id):
     username = data.get('username')
     role = data.get('role')
     password = data.get('password')
+    is_manager = data.get('is_manager')
     if username:
         # Vérifier unicité si changement
         if username != user.username and User.query.filter_by(username=username).first():
@@ -2256,6 +2488,1436 @@ def api_modifier_utilisateur(user_id):
         user.role = role
     if password:
         user.password_hash = generate_password_hash(password)
+    if 'is_manager' in data:
+        user.is_manager = bool(is_manager)
+    db.session.commit()
+    return jsonify({'success': True})
+
+# Routes pour la gestion du personnel
+@app.route('/perso')
+@require_page_access('perso')
+def perso():
+    # Les chefs d'équipe ont la même interface que les opérateurs pour le moment
+    is_manager = (current_user.is_manager or current_user.role == 'admin') and current_user.role != 'chef_equipe'
+    return render_template('perso.html', is_manager=is_manager)
+
+# API - Liste du personnel (manager voit tout, personnel voit seulement son profil)
+@app.route('/api/perso/personnel', methods=['GET'])
+@require_page_access('perso')
+def api_liste_personnel():
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    if is_manager:
+        # Manager voit tout le personnel
+        personnel_list = Personnel.query.all()
+    else:
+        # Personnel voit seulement son profil
+        personnel = Personnel.query.filter_by(user_id=current_user.id).first()
+        personnel_list = [personnel] if personnel else []
+    
+    data = []
+    for p in personnel_list:
+        data.append({
+            'id': p.id,
+            'user_id': p.user_id,
+            'nom': p.nom,
+            'prenom': p.prenom,
+            'email': p.email,
+            'telephone': p.telephone,
+            'date_embauche': p.date_embauche.isoformat() if p.date_embauche else None,
+            'poste': p.poste,
+            'societe': p.societe,
+            'site_id': p.site_id,
+            'username': p.user.username if p.user else None
+        })
+    return jsonify(data)
+
+# API - Créer un membre du personnel (manager seulement)
+@app.route('/api/perso/personnel', methods=['POST'])
+@require_page_access('perso')
+def api_creer_personnel():
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Données JSON manquantes'}), 400
+    
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'user_id manquant'}), 400
+    
+    # Vérifier que l'utilisateur existe et n'a pas déjà un profil personnel
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'Utilisateur introuvable'}), 404
+    
+    if Personnel.query.filter_by(user_id=user_id).first():
+        return jsonify({'error': 'Ce utilisateur a déjà un profil personnel'}), 400
+    
+    personnel = Personnel(
+        user_id=user_id,
+        nom=data.get('nom', ''),
+        prenom=data.get('prenom', ''),
+        email=data.get('email'),
+        telephone=data.get('telephone'),
+        date_embauche=datetime.strptime(data['date_embauche'], '%Y-%m-%d').date() if data.get('date_embauche') else None,
+        poste=data.get('poste'),
+        societe=data.get('societe'),
+        site_id=int(data.get('site_id')) if data.get('site_id') else None
+    )
+    db.session.add(personnel)
+    db.session.commit()
+    return jsonify({'success': True, 'id': personnel.id})
+
+# API - Modifier un membre du personnel
+@app.route('/api/perso/personnel/<int:personnel_id>', methods=['PUT'])
+@require_page_access('perso')
+def api_modifier_personnel(personnel_id):
+    personnel = Personnel.query.get_or_404(personnel_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    # Vérifier les droits: manager peut modifier tout, personnel peut modifier seulement son profil
+    if not is_manager and personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Données JSON manquantes'}), 400
+    
+    if 'nom' in data:
+        personnel.nom = data['nom']
+    if 'prenom' in data:
+        personnel.prenom = data['prenom']
+    if 'email' in data:
+        personnel.email = data['email']
+    if 'telephone' in data:
+        personnel.telephone = data['telephone']
+    if 'date_embauche' in data:
+        personnel.date_embauche = datetime.strptime(data['date_embauche'], '%Y-%m-%d').date() if data['date_embauche'] else None
+    if 'poste' in data:
+        personnel.poste = data['poste']
+    if 'societe' in data:
+        personnel.societe = data['societe']
+    if 'site_id' in data:
+        site_id_value = data.get('site_id')
+        if site_id_value:
+            try:
+                personnel.site_id = int(site_id_value)
+            except (ValueError, TypeError):
+                personnel.site_id = None
+        else:
+            personnel.site_id = None
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+# API - Supprimer un membre du personnel (manager seulement)
+@app.route('/api/perso/personnel/<int:personnel_id>', methods=['DELETE'])
+@require_page_access('perso')
+def api_supprimer_personnel(personnel_id):
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    personnel = Personnel.query.get_or_404(personnel_id)
+    db.session.delete(personnel)
+    db.session.commit()
+    return jsonify({'success': True})
+
+# API - Gérer les jours travaillés
+@app.route('/api/perso/personnel/<int:personnel_id>/jours-travailles', methods=['GET', 'POST', 'PUT'])
+@require_page_access('perso')
+def api_jours_travailles(personnel_id):
+    personnel = Personnel.query.get_or_404(personnel_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    if request.method == 'GET':
+        jours = WorkingDays.query.filter_by(personnel_id=personnel_id).all()
+        data = [{
+            'id': j.id,
+            'jour_semaine': j.jour_semaine,
+            'type_journee': j.type_journee
+        } for j in jours]
+        return jsonify(data)
+    
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if request.method == 'POST' or request.method == 'PUT':
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Données JSON manquantes'}), 400
+        
+        # Supprimer les anciens jours travaillés
+        WorkingDays.query.filter_by(personnel_id=personnel_id).delete()
+        
+        # Créer les nouveaux jours travaillés
+        for jour_data in data.get('jours', []):
+            jour = WorkingDays(
+                personnel_id=personnel_id,
+                jour_semaine=jour_data['jour_semaine'],
+                type_journee=jour_data['type_journee']
+            )
+            db.session.add(jour)
+        
+        db.session.commit()
+        return jsonify({'success': True})
+
+# API - Demandes de congé
+@app.route('/api/perso/conges', methods=['GET', 'POST'])
+@require_page_access('perso')
+def api_conges():
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    if request.method == 'GET':
+        if is_manager:
+            # Manager voit toutes les demandes
+            demandes = LeaveRequest.query.order_by(LeaveRequest.created_at.desc()).all()
+        else:
+            # Personnel voit seulement ses demandes
+            personnel = Personnel.query.filter_by(user_id=current_user.id).first()
+            if not personnel:
+                return jsonify([])
+            demandes = LeaveRequest.query.filter_by(personnel_id=personnel.id).order_by(LeaveRequest.created_at.desc()).all()
+        
+        data = []
+        for d in demandes:
+            # Calculer le nombre de jours
+            nombre_jours = (d.date_fin - d.date_debut).days + 1
+            data.append({
+                'id': d.id,
+                'personnel_id': d.personnel_id,
+                'personnel_nom': f"{d.personnel.prenom} {d.personnel.nom}",
+                'personnel_prenom': d.personnel.prenom,
+                'personnel_nom_complet': d.personnel.nom,
+                'personnel_email': d.personnel.email,
+                'personnel_site_id': d.personnel.site_id,  # 1=SMP, 2=LPZ
+                'date_debut': d.date_debut.isoformat(),
+                'date_fin': d.date_fin.isoformat(),
+                'type_conge': d.type_conge,
+                'statut': d.statut,
+                'commentaire': d.commentaire,
+                'nombre_jours': nombre_jours,
+                'created_at': d.created_at.isoformat()
+            })
+        return jsonify(data)
+    
+    elif request.method == 'POST':
+        # Créer une demande de congé
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Données JSON manquantes'}), 400
+        
+        personnel = Personnel.query.filter_by(user_id=current_user.id).first()
+        if not personnel:
+            return jsonify({'error': 'Profil personnel introuvable'}), 404
+        
+        demande = LeaveRequest(
+            personnel_id=personnel.id,
+            date_debut=datetime.strptime(data['date_debut'], '%Y-%m-%d').date(),
+            date_fin=datetime.strptime(data['date_fin'], '%Y-%m-%d').date(),
+            type_conge=data.get('type_conge', 'conge_paye'),
+            commentaire=data.get('commentaire')
+        )
+        db.session.add(demande)
+        db.session.commit()
+        return jsonify({'success': True, 'id': demande.id})
+
+# Fonction pour générer le PDF de congé en utilisant le template vierge
+def generer_pdf_conge(demande):
+    """Génère un PDF de formulaire d'autorisation d'absence en remplissant le template vierge"""
+    try:
+        # Vérifier si le template existe (essayer plusieurs chemins et noms possibles)
+        template_paths = [
+            TEMPLATE_PDF_PATH,
+            os.path.join('static', 'templates', 'formulaire_absence_vierge.pdf'),
+            os.path.join('static', 'templates', 'formulaire-absence-vierge.pdf'),  # Avec tirets
+            os.path.join(os.path.dirname(__file__), 'static', 'templates', 'formulaire_absence_vierge.pdf'),
+            os.path.join(os.path.dirname(__file__), 'static', 'templates', 'formulaire-absence-vierge.pdf'),  # Avec tirets
+            os.path.abspath(os.path.join('static', 'templates', 'formulaire_absence_vierge.pdf')),
+            os.path.abspath(os.path.join('static', 'templates', 'formulaire-absence-vierge.pdf'))  # Avec tirets
+        ]
+        
+        template_path = None
+        for path in template_paths:
+            if os.path.exists(path):
+                template_path = path
+                break
+        
+        if not template_path:
+            error_msg = f"⚠️ Template PDF non trouvé!\n"
+            error_msg += f"   Chemins testés:\n"
+            for path in template_paths:
+                abs_path = os.path.abspath(path) if path else "None"
+                exists = os.path.exists(path) if path else False
+                error_msg += f"   - {abs_path} (existe: {exists})\n"
+            error_msg += f"\n   Veuillez placer le fichier 'formulaire_absence_vierge.pdf' dans le dossier:\n"
+            error_msg += f"   {os.path.abspath('static/templates')}\n"
+            print(error_msg)
+            # Afficher aussi les fichiers présents dans le dossier templates
+            templates_dir = os.path.join('static', 'templates')
+            if os.path.exists(templates_dir):
+                files = os.listdir(templates_dir)
+                if files:
+                    print(f"   Fichiers trouvés dans static/templates/: {', '.join(files)}")
+                else:
+                    print(f"   Le dossier static/templates/ existe mais est vide.")
+            return None
+        
+        # Lire le template PDF
+        template_reader = PdfReader(open(template_path, 'rb'))
+        template_page = template_reader.pages[0]
+        
+        # Créer un overlay avec reportlab pour écrire les données
+        overlay_buffer = io.BytesIO()
+        overlay = Canvas(overlay_buffer, pagesize=A4)
+        width, height = A4
+        
+        # Informations du personnel
+        personnel = demande.personnel
+        
+        # Conversion : reportlab utilise Y depuis le bas, l'utilisateur donne Y depuis le haut
+        # Hauteur A4 = 29.7cm, donc Y_bas = 29.7 - Y_haut
+        height_cm = 29.7
+        
+        # Date de la demande : X=6.5cm, Y=3.9cm - 4mm = 3.5cm (depuis le haut) - pas de changement
+        date_demande = demande.created_at.strftime('%d/%m/%Y') if demande.created_at else datetime.now().strftime('%d/%m/%Y')
+        overlay.setFont("Helvetica", 10)
+        overlay.drawString(6.5*cm, (height_cm - 3.5)*cm, date_demande)
+        
+        # NOM : X=4.5cm, Y=4.6cm + 2mm = 4.8cm (depuis le haut)
+        overlay.setFont("Helvetica", 11)
+        overlay.drawString(4.5*cm, (height_cm - 4.8)*cm, personnel.nom.upper())
+        
+        # Société d'appartenance : X=7.5cm (3cm à droite du NOM), Y=5.3cm
+        if personnel.societe:
+            overlay.setFont("Helvetica", 10)
+            overlay.drawString(7.5*cm, (height_cm - 5.3)*cm, personnel.societe)
+        
+        # Prénom : X=14cm, Y=4.6cm + 2mm = 4.8cm (depuis le haut)
+        overlay.setFont("Helvetica", 11)
+        overlay.drawString(14*cm, (height_cm - 4.8)*cm, personnel.prenom)
+        
+        # Direction "MATERIEL" : X=5cm, Y=5.6cm + 2mm = 5.8cm (depuis le haut)
+        overlay.setFont("Helvetica", 11)
+        overlay.drawString(5*cm, (height_cm - 5.8)*cm, "MATERIEL")
+        
+        # Zone de travaux "STE" : X=6.5cm, Y=6.2cm + 2mm = 6.4cm (depuis le haut)
+        overlay.drawString(6.5*cm, (height_cm - 6.4)*cm, "STE")
+        
+        # Mapper les types de congé vers les colonnes du formulaire
+        type_mapping = {
+            'conge_paye': 'CP',
+            'rtt': 'RTT',
+            'conge_sans_solde': 'Congé sans solde',
+            'conge_paternite': 'Congé paternité/maternité',
+            'congé_autorise_paye': 'Absence autorisée payée',
+            'congé_autorise_non_paye': 'Absence autorisée non-payée'
+        }
+        type_label = type_mapping.get(demande.type_conge, demande.type_conge)
+        
+        # Calculer le nombre de jours
+        nombre_jours = (demande.date_fin - demande.date_debut).days + 1
+        
+        # Dates formatées
+        date_debut_str = demande.date_debut.strftime('%d/%m/%Y')
+        date_fin_str = demande.date_fin.strftime('%d/%m/%Y')
+        
+        # Nb de jours : X=12cm, Y=8cm + 2mm = 8.2cm (depuis le haut)
+        overlay.setFont("Helvetica", 11)
+        overlay.drawString(12*cm, (height_cm - 8.2)*cm, str(nombre_jours))
+        
+        # Du : X=11cm, Y=8.9cm + 2mm = 9.1cm (depuis le haut)
+        overlay.drawString(11*cm, (height_cm - 9.1)*cm, date_debut_str)
+        
+        # Au : X=11cm, Y=9.4cm + 2mm + 2mm = 9.8cm (depuis le haut)
+        overlay.drawString(11*cm, (height_cm - 9.8)*cm, date_fin_str)
+        
+        # Commentaire (si présent, dans la zone commentaire)
+        if demande.commentaire:
+            overlay.setFont("Helvetica", 9)
+            commentaire_y = height - 15.5*cm
+            commentaire_lines = demande.commentaire.split('\n')
+            for i, line in enumerate(commentaire_lines[:5]):  # Max 5 lignes
+                overlay.drawString(2*cm, commentaire_y - (i * 0.5*cm), line[:100])
+        
+        # Date signature de l'intéressé : X=6.5cm, Y=19.6cm + 1mm = 19.7cm (depuis le haut) - date de demande
+        date_signature_interesse = demande.created_at.strftime('%d/%m/%Y') if demande.created_at else datetime.now().strftime('%d/%m/%Y')
+        overlay.setFont("Helvetica", 10)
+        overlay.drawString(6.5*cm, (height_cm - 19.7)*cm, date_signature_interesse)
+        
+        # Date signature du supérieur hiérarchique : X=12cm, Y=19.6cm + 1mm = 19.7cm (depuis le haut) - date d'acceptation
+        date_signature_superieur = datetime.now().strftime('%d/%m/%Y')
+        overlay.drawString(12*cm, (height_cm - 19.7)*cm, date_signature_superieur)
+        
+        # Fonction helper pour charger et afficher une signature
+        def ajouter_signature(user_id, x_cm, role_description=""):
+            """Ajoute une signature à la position X donnée, à la hauteur Y=21.2cm"""
+            print(f"[PDF] Recherche de la signature pour user_id={user_id} ({role_description})")
+            signature = ManagerSignature.query.filter_by(user_id=user_id).first()
+            if not signature:
+                print(f"[PDF] ⚠️ Aucune signature trouvée en base pour user_id={user_id} ({role_description})")
+                return False
+            if not os.path.exists(signature.signature_path):
+                print(f"[PDF] ⚠️ Fichier de signature introuvable: {signature.signature_path} pour user_id={user_id} ({role_description})")
+                return False
+            try:
+                print(f"[PDF] ✓ Signature trouvée pour user_id={user_id} ({role_description}): {signature.signature_path}")
+                # Charger et redimensionner la signature
+                img = Image.open(signature.signature_path)
+                # Redimensionner pour qu'elle fasse environ 3cm de large (réduite pour ne pas chevaucher avec les dates)
+                img_width_cm = 3
+                img_width_px = int(img_width_cm * cm)
+                ratio = img_width_px / img.width
+                img_height_px = int(img.height * ratio)
+                img = img.resize((img_width_px, img_height_px), Image.Resampling.LANCZOS)
+                
+                # Sauvegarder temporairement
+                temp_img_path = os.path.join(tempfile.gettempdir(), f"signature_{user_id}_{datetime.now().timestamp()}.png")
+                img.save(temp_img_path)
+                
+                # Position de la signature : Y=21.2cm (depuis le haut) - montée de 0.5cm
+                signature_x = x_cm * cm
+                signature_y = (height_cm - 21.2) * cm
+                overlay.drawImage(temp_img_path, signature_x, signature_y, width=img_width_px, height=img_height_px)
+                print(f"[PDF] ✓ Signature ajoutée à X={x_cm}cm, Y=21.2cm pour user_id={user_id} ({role_description})")
+                
+                # Supprimer le fichier temporaire
+                os.remove(temp_img_path)
+                return True
+            except Exception as e:
+                print(f"[PDF] ❌ Erreur lors de l'ajout de la signature (user_id={user_id}, {role_description}): {e}")
+                import traceback
+                traceback.print_exc()
+                return False
+        
+        # Ajouter la signature de l'opérateur/chef d'équipe (demandeur) : X=5cm (3cm vers la gauche par rapport à 8cm)
+        print(f"[PDF] Génération PDF pour demande {demande.id}, personnel_id={personnel.id}, personnel.user_id={personnel.user_id}")
+        if personnel.user_id:
+            ajouter_signature(personnel.user_id, 5, "demandeur (opérateur/chef d'équipe)")
+        else:
+            print(f"[PDF] ⚠️ personnel.user_id est None pour personnel_id={personnel.id}")
+        
+        # Ajouter la signature du manager (qui accepte) : X=12cm
+        print(f"[PDF] Manager qui accepte: current_user.id={current_user.id}, current_user.username={current_user.username}")
+        ajouter_signature(current_user.id, 12, "manager (qui accepte)")
+        
+        # Finaliser l'overlay
+        overlay.save()
+        overlay_buffer.seek(0)
+        
+        # Fusionner le template et l'overlay
+        template_writer = PdfWriter()
+        overlay_reader = PdfReader(overlay_buffer)
+        overlay_page = overlay_reader.pages[0]
+        
+        # Fusionner les pages
+        template_page.merge_page(overlay_page)
+        template_writer.add_page(template_page)
+        
+        # Créer le PDF final
+        output_buffer = io.BytesIO()
+        template_writer.write(output_buffer)
+        output_buffer.seek(0)
+        
+        return output_buffer
+        
+    except Exception as e:
+        print(f"Erreur lors de la génération du PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+# API - Accepter/Refuser une demande de congé (manager seulement)
+@app.route('/api/perso/conges/<int:demande_id>', methods=['PUT'])
+@require_page_access('perso')
+def api_modifier_conge(demande_id):
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    demande = LeaveRequest.query.get_or_404(demande_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Données JSON manquantes'}), 400
+    
+    if 'statut' in data:
+        old_statut = demande.statut
+        demande.statut = data['statut']
+        
+        # Générer le PDF automatiquement si le congé est accepté
+        if data['statut'] == 'accepte' and old_statut != 'accepte':
+            pdf_buffer = generer_pdf_conge(demande)
+            if pdf_buffer:
+                try:
+                    # Créer le dossier pour les PDFs de congé s'il n'existe pas
+                    pdf_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'conges', str(demande_id))
+                    os.makedirs(pdf_dir, exist_ok=True)
+                    
+                    # Nom du fichier PDF
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    pdf_filename = f"formulaire_conge_{demande.id}_{timestamp}.pdf"
+                    pdf_path = os.path.join(pdf_dir, pdf_filename)
+                    
+                    # Sauvegarder le PDF
+                    with open(pdf_path, 'wb') as f:
+                        f.write(pdf_buffer.read())
+                    
+                    # Enregistrer le document en base
+                    pdf_doc = LeaveRequestDocument(
+                        leave_request_id=demande.id,
+                        nom_fichier=f"Formulaire d'autorisation d'absence - {demande.personnel.nom} {demande.personnel.prenom}.pdf",
+                        chemin_fichier=pdf_path
+                    )
+                    db.session.add(pdf_doc)
+                    
+                    # Ajouter le document à la liste de documents du demandeur
+                    personnel_doc = PersonnelDocument(
+                        personnel_id=demande.personnel_id,
+                        nom_fichier=f"Formulaire d'autorisation d'absence - {demande.personnel.nom} {demande.personnel.prenom}.pdf",
+                        chemin_fichier=pdf_path,
+                        type_document='autorisation_absence',
+                        description=f"Formulaire d'autorisation d'absence du {demande.date_debut.strftime('%d/%m/%Y')} au {demande.date_fin.strftime('%d/%m/%Y')}",
+                        uploaded_by=current_user.id
+                    )
+                    db.session.add(personnel_doc)
+                except Exception as e:
+                    print(f"Erreur lors de la sauvegarde du PDF: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"⚠️ Échec de la génération du PDF pour le congé {demande_id}")
+                print(f"   Vérifiez que le template existe à: {TEMPLATE_PDF_PATH}")
+                print(f"   Chemin absolu: {os.path.abspath(TEMPLATE_PDF_PATH)}")
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+# API - Supprimer un congé (manager seulement)
+@app.route('/api/perso/conges/<int:demande_id>', methods=['DELETE'])
+@require_page_access('perso')
+def api_supprimer_conge(demande_id):
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    demande = LeaveRequest.query.get_or_404(demande_id)
+    
+    try:
+        # Récupérer tous les documents associés au congé
+        documents = LeaveRequestDocument.query.filter_by(leave_request_id=demande_id).all()
+        
+        # Pour chaque document, supprimer aussi le document PersonnelDocument correspondant
+        # (celui qui a été créé lors de la validation)
+        for doc in documents:
+            # Chercher le document PersonnelDocument qui a le même chemin_fichier
+            personnel_doc = PersonnelDocument.query.filter_by(
+                personnel_id=demande.personnel_id,
+                chemin_fichier=doc.chemin_fichier,
+                type_document='autorisation_absence'
+            ).first()
+            
+            if personnel_doc:
+                # Supprimer le fichier physique s'il existe
+                if os.path.exists(personnel_doc.chemin_fichier):
+                    try:
+                        os.remove(personnel_doc.chemin_fichier)
+                    except Exception as e:
+                        print(f"Erreur lors de la suppression du fichier {personnel_doc.chemin_fichier}: {e}")
+                
+                # Supprimer le document PersonnelDocument
+                db.session.delete(personnel_doc)
+            
+            # Supprimer aussi le fichier physique du LeaveRequestDocument
+            if os.path.exists(doc.chemin_fichier):
+                try:
+                    os.remove(doc.chemin_fichier)
+                except Exception as e:
+                    print(f"Erreur lors de la suppression du fichier {doc.chemin_fichier}: {e}")
+        
+        # Supprimer le dossier du congé s'il est vide
+        pdf_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'conges', str(demande_id))
+        if os.path.exists(pdf_dir):
+            try:
+                # Essayer de supprimer le dossier s'il est vide
+                if not os.listdir(pdf_dir):
+                    os.rmdir(pdf_dir)
+            except Exception as e:
+                print(f"Erreur lors de la suppression du dossier {pdf_dir}: {e}")
+        
+        # Supprimer le congé (les LeaveRequestDocument seront supprimés automatiquement par cascade)
+        db.session.delete(demande)
+        db.session.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        print(f"Erreur lors de la suppression du congé: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Erreur lors de la suppression: {str(e)}'}), 500
+
+# API - Uploader le template PDF (admin seulement)
+@app.route('/api/perso/manager/template-pdf', methods=['POST'])
+@require_page_access('perso')
+def api_upload_template_pdf():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'Aucun fichier fourni'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Aucun fichier sélectionné'}), 400
+    
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({'error': 'Le fichier doit être un PDF'}), 400
+    
+    try:
+        # Sauvegarder le template
+        file.save(TEMPLATE_PDF_PATH)
+        return jsonify({'success': True, 'message': 'Template PDF enregistré avec succès'})
+    except Exception as e:
+        print(f"Erreur lors de l'upload du template: {e}")
+        return jsonify({'error': f'Erreur lors de l\'upload: {str(e)}'}), 500
+
+# API - Uploader la signature (opérateurs, chefs d'équipe et managers)
+@app.route('/api/perso/manager/signature', methods=['POST'])
+@require_page_access('perso')
+def api_upload_signature():
+    # Permettre à tous les utilisateurs (opérateurs, chefs d'équipe, managers) d'uploader leur signature
+    # Vérifier que l'utilisateur a un rôle valide
+    if current_user.role not in ['operateur', 'chef_equipe', 'admin'] and not current_user.is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'Aucun fichier fourni'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Aucun fichier sélectionné'}), 400
+    
+    # Vérifier que c'est une image
+    if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+        return jsonify({'error': 'Le fichier doit être une image'}), 400
+    
+    try:
+        print(f"[UPLOAD SIGNATURE] Upload pour user_id={current_user.id}, username={current_user.username}, role={current_user.role}")
+        # Sauvegarder le fichier
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"signature_{current_user.id}_{timestamp}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'signatures')
+        os.makedirs(filepath, exist_ok=True)
+        full_path = os.path.join(filepath, filename)
+        file.save(full_path)
+        print(f"[UPLOAD SIGNATURE] Fichier sauvegardé: {full_path}")
+        
+        # Enregistrer ou mettre à jour la signature
+        signature = ManagerSignature.query.filter_by(user_id=current_user.id).first()
+        if signature:
+            print(f"[UPLOAD SIGNATURE] Mise à jour signature existante (id={signature.id})")
+            # Supprimer l'ancienne signature
+            if os.path.exists(signature.signature_path):
+                os.remove(signature.signature_path)
+                print(f"[UPLOAD SIGNATURE] Ancienne signature supprimée: {signature.signature_path}")
+            signature.signature_path = full_path
+            signature.updated_at = datetime.utcnow()
+        else:
+            print(f"[UPLOAD SIGNATURE] Création nouvelle signature pour user_id={current_user.id}")
+            signature = ManagerSignature(
+                user_id=current_user.id,
+                signature_path=full_path
+            )
+            db.session.add(signature)
+        
+        db.session.commit()
+        print(f"[UPLOAD SIGNATURE] ✓ Signature enregistrée avec succès pour user_id={current_user.id}")
+        return jsonify({'success': True, 'message': 'Signature enregistrée avec succès'})
+    except Exception as e:
+        print(f"Erreur lors de l'upload de la signature: {e}")
+        return jsonify({'error': f'Erreur lors de l\'upload: {str(e)}'}), 500
+
+# API - Télécharger un PDF de congé
+@app.route('/api/perso/conges/<int:demande_id>/pdf/<int:pdf_id>')
+@require_page_access('perso')
+def api_download_pdf_conge(demande_id, pdf_id):
+    demande = LeaveRequest.query.get_or_404(demande_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    # Vérifier les droits
+    if not is_manager and demande.personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    pdf_doc = LeaveRequestDocument.query.filter_by(id=pdf_id, leave_request_id=demande_id).first_or_404()
+    
+    if os.path.exists(pdf_doc.chemin_fichier):
+        return send_file(pdf_doc.chemin_fichier, as_attachment=True, download_name=pdf_doc.nom_fichier)
+    else:
+        return jsonify({'error': 'Fichier introuvable'}), 404
+
+# API - Lister les PDFs d'un congé
+@app.route('/api/perso/conges/<int:demande_id>/pdfs')
+@require_page_access('perso')
+def api_list_pdfs_conge(demande_id):
+    demande = LeaveRequest.query.get_or_404(demande_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    # Vérifier les droits
+    if not is_manager and demande.personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    pdfs = LeaveRequestDocument.query.filter_by(leave_request_id=demande_id).order_by(LeaveRequestDocument.created_at.desc()).all()
+    data = [{
+        'id': p.id,
+        'nom_fichier': p.nom_fichier,
+        'created_at': p.created_at.isoformat()
+    } for p in pdfs]
+    return jsonify(data)
+
+# API - Documents du personnel
+@app.route('/api/perso/personnel/<int:personnel_id>/documents', methods=['GET', 'POST'])
+@require_page_access('perso')
+def api_documents(personnel_id):
+    personnel = Personnel.query.get_or_404(personnel_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    # Vérifier les droits: manager peut voir/ajouter pour tous, personnel seulement pour lui
+    if not is_manager and personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if request.method == 'GET':
+        documents = PersonnelDocument.query.filter_by(personnel_id=personnel_id).all()
+        data = [{
+            'id': d.id,
+            'nom_fichier': d.nom_fichier,
+            'type_document': d.type_document,
+            'description': d.description,
+            'created_at': d.created_at.isoformat()
+        } for d in documents]
+        return jsonify(data)
+    
+    elif request.method == 'POST':
+        if not is_manager:
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        if 'file' not in request.files:
+            return jsonify({'error': 'Aucun fichier fourni'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'Aucun fichier sélectionné'}), 400
+        
+        # Sauvegarder le fichier
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{timestamp}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'personnel', str(personnel_id))
+        os.makedirs(filepath, exist_ok=True)
+        full_path = os.path.join(filepath, filename)
+        file.save(full_path)
+        
+        document = PersonnelDocument(
+            personnel_id=personnel_id,
+            nom_fichier=file.filename,
+            chemin_fichier=full_path,
+            type_document=request.form.get('type_document'),
+            description=request.form.get('description'),
+            uploaded_by=current_user.id
+        )
+        db.session.add(document)
+        db.session.commit()
+        return jsonify({'success': True, 'id': document.id})
+
+# API - Télécharger un document
+@app.route('/api/perso/documents/<int:document_id>/download')
+@require_page_access('perso')
+def api_download_document(document_id):
+    document = PersonnelDocument.query.get_or_404(document_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    # Vérifier les droits
+    if not is_manager and document.personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if os.path.exists(document.chemin_fichier):
+        return send_file(document.chemin_fichier, as_attachment=True, download_name=document.nom_fichier)
+    else:
+        return jsonify({'error': 'Fichier introuvable'}), 404
+
+# API - Supprimer un document (manager seulement)
+@app.route('/api/perso/documents/<int:document_id>', methods=['DELETE'])
+@require_page_access('perso')
+def api_supprimer_document(document_id):
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    document = PersonnelDocument.query.get_or_404(document_id)
+    if os.path.exists(document.chemin_fichier):
+        os.remove(document.chemin_fichier)
+    db.session.delete(document)
+    db.session.commit()
+    return jsonify({'success': True})
+
+# API - Absences (manager seulement pour créer)
+@app.route('/api/perso/absences', methods=['GET', 'POST'])
+@require_page_access('perso')
+def api_absences():
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    if request.method == 'GET':
+        type_liste = request.args.get('type', 'avenir')  # 'attente' ou 'avenir'
+        
+        personnel_id = request.args.get('personnel_id', type=int)
+        
+        if type_liste == 'attente':
+            # Absences en attente de validation créées par les employés (non managers)
+            # Gérer le cas où le champ statut n'existe pas encore ou est NULL
+            try:
+                base_query = Absence.query.join(User, Absence.created_by == User.id).filter(
+                    or_(
+                        Absence.statut == 'en_attente',
+                        Absence.statut == None
+                    ),
+                    User.is_manager == False,
+                    User.role != 'admin'
+                )
+            except:
+                # Si le champ statut n'existe pas, filtrer seulement par créateur
+                base_query = Absence.query.join(User, Absence.created_by == User.id).filter(
+                    User.is_manager == False,
+                    User.role != 'admin'
+                )
+            
+            if personnel_id:
+                absences = base_query.filter_by(personnel_id=personnel_id).all()
+            elif is_manager:
+                # Managers voient toutes les demandes des employés en attente
+                absences = base_query.all()
+            else:
+                # Personnel voit seulement ses absences en attente qu'il a créées
+                personnel = Personnel.query.filter_by(user_id=current_user.id).first()
+                if not personnel:
+                    return jsonify([])
+                absences = base_query.filter_by(personnel_id=personnel.id).all()
+            
+            # Sérialiser les absences en attente
+            data = []
+            for a in absences:
+                try:
+                    statut = getattr(a, 'statut', None) or 'en_attente'
+                except:
+                    statut = 'en_attente'
+                
+                try:
+                    personnel_nom = f"{a.personnel.prenom} {a.personnel.nom}" if a.personnel else 'Inconnu'
+                except:
+                    personnel_nom = 'Inconnu'
+                
+                data.append({
+                    'id': a.id,
+                    'personnel_id': a.personnel_id,
+                    'personnel_nom': personnel_nom,
+                    'date_debut': a.date_debut.isoformat() if a.date_debut else None,
+                    'date_fin': a.date_fin.isoformat() if a.date_fin else None,
+                    'type_absence': a.type_absence or '-',
+                    'statut': statut,
+                    'commentaire': a.commentaire or '-',
+                    'created_at': a.created_at.isoformat() if a.created_at else None
+                })
+            
+            return jsonify(data)
+        else:
+            # Absences à venir (mois en cours et mois suivant)
+            # Inclure les absences validées ET les congés acceptés
+            today = datetime.now().date()
+            # Premier jour du mois suivant
+            if today.month == 12:
+                premier_jour_mois_suivant = datetime(today.year + 1, 1, 1).date()
+            else:
+                premier_jour_mois_suivant = datetime(today.year, today.month + 1, 1).date()
+            # Dernier jour du mois suivant
+            if premier_jour_mois_suivant.month == 12:
+                dernier_jour_mois_suivant = datetime(premier_jour_mois_suivant.year + 1, 1, 1).date() - timedelta(days=1)
+            else:
+                dernier_jour_mois_suivant = datetime(premier_jour_mois_suivant.year, premier_jour_mois_suivant.month + 1, 1).date() - timedelta(days=1)
+            
+            # Récupérer les absences validées
+            try:
+                base_query_absences = Absence.query.filter(
+                    or_(
+                        Absence.statut == 'validee',
+                        Absence.statut == None  # Pour les absences créées avant l'ajout du champ statut
+                    ),
+                    Absence.date_fin >= today,
+                    Absence.date_debut <= dernier_jour_mois_suivant
+                )
+            except Exception as e:
+                # Si le champ statut n'existe pas, filtrer seulement par date
+                print(f"Champ statut non disponible, filtrage par date uniquement: {e}")
+                base_query_absences = Absence.query.filter(
+                    Absence.date_fin >= today,
+                    Absence.date_debut <= dernier_jour_mois_suivant
+                )
+            
+            # Récupérer les congés acceptés
+            base_query_conges = LeaveRequest.query.filter(
+                LeaveRequest.statut == 'accepte',
+                LeaveRequest.date_fin >= today,
+                LeaveRequest.date_debut <= dernier_jour_mois_suivant
+            )
+            
+            # Récupérer les formations à venir
+            base_query_formations = Formation.query.filter(
+                Formation.date_fin >= today,
+                Formation.date_debut <= dernier_jour_mois_suivant
+            )
+            
+            if personnel_id:
+                absences = base_query_absences.filter_by(personnel_id=personnel_id).all()
+                conges = base_query_conges.filter_by(personnel_id=personnel_id).all()
+                formations = base_query_formations.filter_by(personnel_id=personnel_id).all()
+            elif is_manager:
+                absences = base_query_absences.all()
+                conges = base_query_conges.all()
+                formations = base_query_formations.all()
+            else:
+                # Personnel voit seulement ses absences, congés et formations
+                personnel = Personnel.query.filter_by(user_id=current_user.id).first()
+                if not personnel:
+                    return jsonify([])
+                absences = base_query_absences.filter_by(personnel_id=personnel.id).all()
+                conges = base_query_conges.filter_by(personnel_id=personnel.id).all()
+                formations = base_query_formations.filter_by(personnel_id=personnel.id).all()
+            
+            # Combiner les absences, congés et formations
+            data = []
+            
+            # Ajouter les absences validées
+            for a in absences:
+                try:
+                    statut = getattr(a, 'statut', None) or 'en_attente'
+                except:
+                    statut = 'en_attente'
+                
+                data.append({
+                    'id': a.id,
+                    'personnel_id': a.personnel_id,
+                    'personnel_nom': f"{a.personnel.prenom} {a.personnel.nom}",
+                    'date_debut': a.date_debut.isoformat(),
+                    'date_fin': a.date_fin.isoformat(),
+                    'type_absence': a.type_absence,
+                    'statut': statut,
+                    'commentaire': a.commentaire,
+                    'created_at': a.created_at.isoformat() if a.created_at else None,
+                    'source': 'absence'
+                })
+            
+            # Ajouter les congés acceptés
+            for c in conges:
+                data.append({
+                    'id': c.id,
+                    'personnel_id': c.personnel_id,
+                    'personnel_nom': f"{c.personnel.prenom} {c.personnel.nom}",
+                    'date_debut': c.date_debut.isoformat(),
+                    'date_fin': c.date_fin.isoformat(),
+                    'type_absence': f"Congé ({c.type_conge})",
+                    'statut': 'validee',
+                    'commentaire': c.commentaire,
+                    'created_at': c.created_at.isoformat() if c.created_at else None,
+                    'source': 'conge'
+                })
+            
+            # Ajouter les formations
+            for f in formations:
+                try:
+                    personnel_nom = f"{f.personnel.prenom} {f.personnel.nom}" if f.personnel else 'Inconnu'
+                except:
+                    personnel_nom = 'Inconnu'
+                
+                data.append({
+                    'id': f.id,
+                    'personnel_id': f.personnel_id,
+                    'personnel_nom': personnel_nom,
+                    'date_debut': f.date_debut.isoformat(),
+                    'date_fin': f.date_fin.isoformat(),
+                    'type_absence': f"Formation: {f.nom_formation}",
+                    'statut': f.statut or 'prevue',
+                    'commentaire': f.description or '-',
+                    'created_at': f.created_at.isoformat() if f.created_at else None,
+                    'source': 'formation'
+                })
+            
+            # Trier par date de début
+            data = sorted(data, key=lambda x: x['date_debut'])
+            return jsonify(data)
+    
+    elif request.method == 'POST':
+        if not is_manager:
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Données JSON manquantes'}), 400
+        
+        # Si c'est un manager qui crée l'absence, elle est automatiquement validée
+        statut_absence = data.get('statut', 'validee' if is_manager else 'en_attente')
+        
+        absence = Absence(
+            personnel_id=data['personnel_id'],
+            date_debut=datetime.strptime(data['date_debut'], '%Y-%m-%d').date(),
+            date_fin=datetime.strptime(data['date_fin'], '%Y-%m-%d').date(),
+            type_absence=data['type_absence'],
+            statut=statut_absence,
+            commentaire=data.get('commentaire'),
+            created_by=current_user.id
+        )
+        db.session.add(absence)
+        db.session.commit()
+        return jsonify({'success': True, 'id': absence.id})
+
+# API - Planning mensuel
+@app.route('/api/perso/planning/<int:personnel_id>')
+@require_page_access('perso')
+def api_planning(personnel_id):
+    personnel = Personnel.query.get_or_404(personnel_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    # Vérifier les droits
+    if not is_manager and personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    mois = request.args.get('mois', type=int)
+    annee = request.args.get('annee', type=int)
+    
+    if not mois or not annee:
+        today = datetime.now()
+        mois = today.month
+        annee = today.year
+    
+    # Récupérer les jours travaillés
+    jours_travailles = WorkingDays.query.filter_by(personnel_id=personnel_id).all()
+    jours_semaine = {j.jour_semaine: j.type_journee for j in jours_travailles}
+    
+    # Générer le planning du mois
+    premier_jour = datetime(annee, mois, 1).date()
+    dernier_jour = (premier_jour.replace(month=premier_jour.month % 12 + 1, day=1) - timedelta(days=1)) if premier_jour.month < 12 else premier_jour.replace(year=premier_jour.year + 1, month=1, day=1) - timedelta(days=1)
+    
+    planning = []
+    current_date = premier_jour
+    
+    while current_date <= dernier_jour:
+        jour_semaine = current_date.weekday()  # 0=lundi, 6=dimanche
+        
+        # Déterminer le type de journée
+        type_journee = jours_semaine.get(jour_semaine, None)
+        
+        # Vérifier les congés (acceptés et en attente)
+        conge = LeaveRequest.query.filter(
+            LeaveRequest.personnel_id == personnel_id,
+            LeaveRequest.statut.in_(['accepte', 'en_attente']),
+            LeaveRequest.date_debut <= current_date,
+            LeaveRequest.date_fin >= current_date
+        ).first()
+        
+        # Vérifier les absences
+        absence = Absence.query.filter(
+            Absence.personnel_id == personnel_id,
+            Absence.date_debut <= current_date,
+            Absence.date_fin >= current_date
+        ).first()
+        
+        # Vérifier les formations
+        formation = Formation.query.filter(
+            Formation.personnel_id == personnel_id,
+            Formation.date_debut <= current_date,
+            Formation.date_fin >= current_date
+        ).first()
+        
+        jour_data = {
+            'date': current_date.isoformat(),
+            'jour_semaine': jour_semaine,
+            'type_journee': type_journee,
+            'conge': {
+                'type': conge.type_conge,
+                'statut': conge.statut
+            } if conge else None,
+            'absence': {
+                'type': absence.type_absence,
+                'commentaire': absence.commentaire
+            } if absence else None,
+            'formation': {
+                'nom': formation.nom_formation,
+                'statut': formation.statut
+            } if formation else None
+        }
+        planning.append(jour_data)
+        current_date += timedelta(days=1)
+    
+    return jsonify(planning)
+
+# API - Planning global mensuel (tous les personnels)
+@app.route('/api/perso/planning-global')
+@require_page_access('perso')
+def api_planning_global():
+    try:
+        mois = request.args.get('mois', type=int)
+        annee = request.args.get('annee', type=int)
+        site_id = request.args.get('site_id', type=int)
+        
+        if not mois or not annee:
+            today = datetime.now()
+            mois = today.month
+            annee = today.year
+        
+        # Récupérer tous les personnels
+        if site_id:
+            # Filtrer par équipe si site_id est fourni
+            personnel_list = Personnel.query.filter_by(site_id=site_id).all()
+        else:
+            personnel_list = Personnel.query.all()
+        
+        # Générer le planning pour chaque personnel
+        result = []
+        for personnel in personnel_list:
+            # Récupérer les jours travaillés
+            jours_travailles = WorkingDays.query.filter_by(personnel_id=personnel.id).all()
+            jours_semaine = {j.jour_semaine: j.type_journee for j in jours_travailles}
+            
+            # Générer le planning du mois
+            premier_jour = datetime(annee, mois, 1).date()
+            dernier_jour = (premier_jour.replace(month=premier_jour.month % 12 + 1, day=1) - timedelta(days=1)) if premier_jour.month < 12 else premier_jour.replace(year=premier_jour.year + 1, month=1, day=1) - timedelta(days=1)
+            
+            planning = []
+            current_date = premier_jour
+            
+            while current_date <= dernier_jour:
+                jour_semaine = current_date.weekday()  # 0=lundi, 6=dimanche
+                
+                # Déterminer le type de journée
+                type_journee = jours_semaine.get(jour_semaine, None)
+                
+                # Vérifier les congés (acceptés et en attente)
+                conge = LeaveRequest.query.filter(
+                    LeaveRequest.personnel_id == personnel.id,
+                    LeaveRequest.statut.in_(['accepte', 'en_attente']),
+                    LeaveRequest.date_debut <= current_date,
+                    LeaveRequest.date_fin >= current_date
+                ).first()
+                
+                # Vérifier les absences validées (ou sans statut pour compatibilité)
+                try:
+                    absence = Absence.query.filter(
+                        Absence.personnel_id == personnel.id,
+                        or_(
+                            Absence.statut == 'validee',
+                            Absence.statut == None
+                        ),
+                        Absence.date_debut <= current_date,
+                        Absence.date_fin >= current_date
+                    ).first()
+                except:
+                    # Si le champ statut n'existe pas, filtrer seulement par date
+                    absence = Absence.query.filter(
+                        Absence.personnel_id == personnel.id,
+                        Absence.date_debut <= current_date,
+                        Absence.date_fin >= current_date
+                    ).first()
+                
+                # Vérifier les formations
+                formation = Formation.query.filter(
+                    Formation.personnel_id == personnel.id,
+                    Formation.date_debut <= current_date,
+                    Formation.date_fin >= current_date
+                ).first()
+                
+                jour_data = {
+                    'date': current_date.isoformat(),
+                    'jour_semaine': jour_semaine,
+                    'type_journee': type_journee,
+                    'conge': {
+                        'type': conge.type_conge,
+                        'statut': conge.statut
+                    } if conge else None,
+                    'absence': {
+                        'type': absence.type_absence,
+                        'commentaire': absence.commentaire
+                    } if absence else None,
+                    'formation': {
+                        'nom': formation.nom_formation,
+                        'statut': formation.statut
+                    } if formation else None
+                }
+                
+                planning.append(jour_data)
+                current_date += timedelta(days=1)
+            
+            result.append({
+                'personnel_id': personnel.id,
+                'personnel_nom': f"{personnel.prenom} {personnel.nom}",
+                'planning': planning
+            })
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"Erreur dans api_planning_global: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Erreur lors de la génération du planning: {str(e)}'}), 500
+
+# API - Modifier le statut d'une absence (manager seulement)
+@app.route('/api/perso/absences/<int:absence_id>', methods=['PUT'])
+@require_page_access('perso')
+def api_modifier_absence(absence_id):
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    absence = Absence.query.get_or_404(absence_id)
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Données JSON manquantes'}), 400
+    
+    if 'statut' in data:
+        try:
+            absence.statut = data['statut']
+        except AttributeError:
+            # Le champ statut n'existe pas encore
+            return jsonify({'error': 'Le champ statut n\'est pas encore disponible. Veuillez redémarrer l\'application pour appliquer la migration.'}), 400
+    
+    db.session.commit()
+    return jsonify({'success': True})
+
+# API - Supprimer une absence (manager seulement)
+@app.route('/api/perso/absences/<int:absence_id>', methods=['DELETE'])
+@require_page_access('perso')
+def api_supprimer_absence(absence_id):
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    absence = Absence.query.get_or_404(absence_id)
+    db.session.delete(absence)
+    db.session.commit()
+    return jsonify({'success': True})
+
+# API - Liste des utilisateurs pour créer du personnel (manager seulement)
+@app.route('/api/perso/utilisateurs-disponibles')
+@require_page_access('perso')
+def api_utilisateurs_disponibles():
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    # Utilisateurs qui n'ont pas encore de profil personnel
+    personnel_user_ids = [p.user_id for p in Personnel.query.all()]
+    users = User.query.filter(~User.id.in_(personnel_user_ids)).all()
+    
+    data = [{
+        'id': u.id,
+        'username': u.username,
+        'role': u.role
+    } for u in users]
+    return jsonify(data)
+
+# API - Formations d'un personnel
+@app.route('/api/perso/personnel/<int:personnel_id>/formations', methods=['GET', 'POST'])
+@require_page_access('perso')
+def api_formations(personnel_id):
+    personnel = Personnel.query.get_or_404(personnel_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    
+    # Vérifier les droits: manager peut voir/ajouter pour tous, personnel seulement pour lui
+    if not is_manager and personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if request.method == 'GET':
+        formations = Formation.query.filter_by(personnel_id=personnel_id).order_by(Formation.date_debut.desc()).all()
+        data = []
+        for f in formations:
+            # Compter les documents
+            nb_docs = len(f.documents)
+            data.append({
+                'id': f.id,
+                'nom_formation': f.nom_formation,
+                'type_formation': f.type_formation or 'demande',
+                'date_debut': f.date_debut.isoformat(),
+                'date_fin': f.date_fin.isoformat(),
+                'date_fin_validite': f.date_fin_validite.isoformat() if f.date_fin_validite else None,
+                'statut': f.statut,
+                'description': f.description,
+                'created_at': f.created_at.isoformat(),
+                'updated_at': f.updated_at.isoformat(),
+                'nb_documents': nb_docs
+            })
+        return jsonify(data)
+    
+    elif request.method == 'POST':
+        if not is_manager:
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Données manquantes'}), 400
+        
+        date_fin_validite = None
+        if data.get('date_fin_validite'):
+            date_fin_validite = datetime.strptime(data.get('date_fin_validite'), '%Y-%m-%d').date()
+        
+        formation = Formation(
+            personnel_id=personnel_id,
+            nom_formation=data.get('nom_formation'),
+            type_formation=data.get('type_formation', 'demande'),
+            date_debut=datetime.strptime(data.get('date_debut'), '%Y-%m-%d').date(),
+            date_fin=datetime.strptime(data.get('date_fin'), '%Y-%m-%d').date(),
+            date_fin_validite=date_fin_validite,
+            statut=data.get('statut', 'prevue'),
+            description=data.get('description'),
+            created_by=current_user.id
+        )
+        db.session.add(formation)
+        db.session.commit()
+        return jsonify({'success': True, 'id': formation.id})
+
+# API - Modifier/Supprimer une formation
+@app.route('/api/perso/formations/<int:formation_id>', methods=['PUT', 'DELETE'])
+@require_page_access('perso')
+def api_formation(formation_id):
+    formation = Formation.query.get_or_404(formation_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    personnel = formation.personnel
+    
+    # Vérifier les droits
+    if not is_manager and personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if request.method == 'PUT':
+        if not is_manager:
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        data = request.get_json()
+        if data.get('nom_formation'):
+            formation.nom_formation = data.get('nom_formation')
+        if data.get('type_formation'):
+            formation.type_formation = data.get('type_formation')
+        if data.get('date_debut'):
+            formation.date_debut = datetime.strptime(data.get('date_debut'), '%Y-%m-%d').date()
+        if data.get('date_fin'):
+            formation.date_fin = datetime.strptime(data.get('date_fin'), '%Y-%m-%d').date()
+        if 'date_fin_validite' in data:
+            if data.get('date_fin_validite'):
+                formation.date_fin_validite = datetime.strptime(data.get('date_fin_validite'), '%Y-%m-%d').date()
+            else:
+                formation.date_fin_validite = None
+        if data.get('statut'):
+            formation.statut = data.get('statut')
+        if 'description' in data:
+            formation.description = data.get('description')
+        
+        db.session.commit()
+        return jsonify({'success': True})
+    
+    elif request.method == 'DELETE':
+        if not is_manager:
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        # Supprimer les documents associés
+        for doc in formation.documents:
+            if os.path.exists(doc.chemin_fichier):
+                os.remove(doc.chemin_fichier)
+        
+        db.session.delete(formation)
+        db.session.commit()
+        return jsonify({'success': True})
+
+# API - Documents d'une formation
+@app.route('/api/perso/formations/<int:formation_id>/documents', methods=['GET', 'POST'])
+@require_page_access('perso')
+def api_formation_documents(formation_id):
+    formation = Formation.query.get_or_404(formation_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    personnel = formation.personnel
+    
+    # Vérifier les droits
+    if not is_manager and personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if request.method == 'GET':
+        documents = FormationDocument.query.filter_by(formation_id=formation_id).all()
+        data = [{
+            'id': d.id,
+            'nom_fichier': d.nom_fichier,
+            'type_document': d.type_document,
+            'description': d.description,
+            'created_at': d.created_at.isoformat()
+        } for d in documents]
+        return jsonify(data)
+    
+    elif request.method == 'POST':
+        if not is_manager:
+            return jsonify({'error': 'Accès non autorisé'}), 403
+        
+        if 'file' not in request.files:
+            return jsonify({'error': 'Aucun fichier fourni'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'Aucun fichier sélectionné'}), 400
+        
+        # Sauvegarder le fichier
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{timestamp}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'formations', str(formation_id))
+        os.makedirs(filepath, exist_ok=True)
+        full_path = os.path.join(filepath, filename)
+        file.save(full_path)
+        
+        document = FormationDocument(
+            formation_id=formation_id,
+            nom_fichier=file.filename,
+            chemin_fichier=full_path,
+            type_document=request.form.get('type_document'),
+            description=request.form.get('description'),
+            uploaded_by=current_user.id
+        )
+        db.session.add(document)
+        db.session.commit()
+        return jsonify({'success': True, 'id': document.id})
+
+# API - Télécharger un document de formation
+@app.route('/api/perso/formation-documents/<int:document_id>/download')
+@require_page_access('perso')
+def api_download_formation_document(document_id):
+    document = FormationDocument.query.get_or_404(document_id)
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    personnel = document.formation.personnel
+    
+    # Vérifier les droits
+    if not is_manager and personnel.user_id != current_user.id:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    if os.path.exists(document.chemin_fichier):
+        return send_file(document.chemin_fichier, as_attachment=True, download_name=document.nom_fichier)
+    else:
+        return jsonify({'error': 'Fichier introuvable'}), 404
+
+# API - Supprimer un document de formation
+@app.route('/api/perso/formation-documents/<int:document_id>', methods=['DELETE'])
+@require_page_access('perso')
+def api_supprimer_formation_document(document_id):
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    document = FormationDocument.query.get_or_404(document_id)
+    if os.path.exists(document.chemin_fichier):
+        os.remove(document.chemin_fichier)
+    db.session.delete(document)
     db.session.commit()
     return jsonify({'success': True})
 
@@ -2313,9 +3975,9 @@ def cleanup_old_data():
             three_years_ago = datetime.now().date() - timedelta(days=1095)
             ReponseRoutine.query.filter(ReponseRoutine.date_creation < three_years_ago).delete()
             
-            # Supprimer les codes magasin de plus de 2 mois
-            deux_mois_avant = datetime.now().date() - timedelta(days=60)
-            codes_supprimes = CodeMagasin.query.filter(CodeMagasin.date < deux_mois_avant).delete()
+            # Supprimer les codes magasin de plus de 3 mois
+            trois_mois_avant = datetime.now().date() - timedelta(days=90)
+            codes_supprimes = CodeMagasin.query.filter(CodeMagasin.date < trois_mois_avant).delete()
             
             db.session.commit()
             
@@ -2520,6 +4182,130 @@ class EmailConfig(db.Model):
     smtp_password = db.Column(db.String(200))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# Modèles pour la gestion du personnel
+class Personnel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
+    nom = db.Column(db.String(100), nullable=False)
+    prenom = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(200))
+    telephone = db.Column(db.String(20))
+    date_embauche = db.Column(db.Date)
+    poste = db.Column(db.String(100))
+    societe = db.Column(db.String(100))  # Société d'appartenance
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)  # 1=SMP, 2=LPZ
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = relationship('User', foreign_keys=[user_id], back_populates='personnel')
+    working_days = relationship('WorkingDays', back_populates='personnel', cascade='all, delete-orphan')
+    leave_requests = relationship('LeaveRequest', back_populates='personnel', cascade='all, delete-orphan')
+    documents = relationship('PersonnelDocument', back_populates='personnel', cascade='all, delete-orphan')
+    absences = relationship('Absence', back_populates='personnel', cascade='all, delete-orphan')
+    formations = relationship('Formation', back_populates='personnel', cascade='all, delete-orphan')
+
+class WorkingDays(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    personnel_id = db.Column(db.Integer, db.ForeignKey('personnel.id'), nullable=False)
+    jour_semaine = db.Column(db.Integer, nullable=False)  # 0=lundi, 6=dimanche
+    type_journee = db.Column(db.String(20), nullable=False)  # matin, apres_midi, journee, nuit
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    personnel = relationship('Personnel', back_populates='working_days')
+
+class LeaveRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    personnel_id = db.Column(db.Integer, db.ForeignKey('personnel.id'), nullable=False)
+    date_debut = db.Column(db.Date, nullable=False)
+    date_fin = db.Column(db.Date, nullable=False)
+    type_conge = db.Column(db.String(50), nullable=False)  # conge_paye, conge_sans_solde, etc.
+    statut = db.Column(db.String(20), default='en_attente')  # en_attente, accepte, refuse
+    commentaire = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    personnel = relationship('Personnel', back_populates='leave_requests')
+    documents = relationship('LeaveRequestDocument', back_populates='leave_request', cascade='all, delete-orphan')
+
+# Modèle pour stocker la signature du manager
+class ManagerSignature(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True)
+    signature_path = db.Column(db.String(500), nullable=False)  # Chemin vers l'image de signature
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = relationship('User')
+
+# Modèle pour stocker les PDFs de congé générés
+class LeaveRequestDocument(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    leave_request_id = db.Column(db.Integer, db.ForeignKey('leave_request.id'), nullable=False)
+    nom_fichier = db.Column(db.String(255), nullable=False)
+    chemin_fichier = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    leave_request = relationship('LeaveRequest', back_populates='documents')
+
+class PersonnelDocument(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    personnel_id = db.Column(db.Integer, db.ForeignKey('personnel.id'), nullable=False)
+    nom_fichier = db.Column(db.String(255), nullable=False)
+    chemin_fichier = db.Column(db.String(500), nullable=False)
+    type_document = db.Column(db.String(100))  # contrat, cv, certificat, etc.
+    description = db.Column(db.Text)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    personnel = relationship('Personnel', back_populates='documents')
+    uploader = relationship('User', foreign_keys=[uploaded_by])
+
+class Absence(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    personnel_id = db.Column(db.Integer, db.ForeignKey('personnel.id'), nullable=False)
+    date_debut = db.Column(db.Date, nullable=False)
+    date_fin = db.Column(db.Date, nullable=False)
+    type_absence = db.Column(db.String(50), nullable=False)  # justifiee, injustifiee, formation
+    statut = db.Column(db.String(20), default='en_attente')  # en_attente, validee, refusee
+    commentaire = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    personnel = relationship('Personnel', back_populates='absences')
+    creator = relationship('User', foreign_keys=[created_by])
+
+class Formation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    personnel_id = db.Column(db.Integer, db.ForeignKey('personnel.id'), nullable=False)
+    nom_formation = db.Column(db.String(200), nullable=False)
+    type_formation = db.Column(db.String(20), default='demande')  # demande, formation_obtenue
+    date_debut = db.Column(db.Date, nullable=False)
+    date_fin = db.Column(db.Date, nullable=False)
+    date_fin_validite = db.Column(db.Date, nullable=True)  # Pour les formations obtenues
+    statut = db.Column(db.String(20), default='prevue')  # prevue, realisee
+    description = db.Column(db.Text)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    personnel = relationship('Personnel', back_populates='formations')
+    creator = relationship('User', foreign_keys=[created_by])
+    documents = relationship('FormationDocument', back_populates='formation', cascade='all, delete-orphan')
+
+class FormationDocument(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    formation_id = db.Column(db.Integer, db.ForeignKey('formation.id'), nullable=False)
+    nom_fichier = db.Column(db.String(255), nullable=False)
+    chemin_fichier = db.Column(db.String(500), nullable=False)
+    type_document = db.Column(db.String(100))  # certificat, attestation, etc.
+    description = db.Column(db.Text)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    formation = relationship('Formation', back_populates='documents')
+    uploader = relationship('User', foreign_keys=[uploaded_by])
 
 # Fonctions d'envoi d'email
 def get_email_config():

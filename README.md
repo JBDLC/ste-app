@@ -93,7 +93,6 @@ ste_releve/
 │   ├── releve_site.html  # Page de relevés
 │   ├── historique.html   # Page d'historique
 │   ├── indicateurs.html  # Page des graphiques
-│   ├── releve_20.html    # Page du relevé du 20
 │   └── photos.html       # Galerie photos
 ├── uploads/              # Dossier des photos uploadées
 └── ste_releve.db         # Base de données SQLite

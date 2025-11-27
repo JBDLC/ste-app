@@ -21,7 +21,7 @@
                     </div>
                     <div class="mt-3">
                         <button id="cleanup-btn" class="btn btn-warning btn-sm" onclick="cleanupDatabase()">
-                            <i class="fas fa-broom me-1"></i>Nettoyage
+                            <i class="fas fa-broom me-1"></i>Nettoyage automatique
                         </button>
                     </div>
                 </div>
@@ -78,15 +78,23 @@
         <div class="card-body">
             <form id="create-user-form">
                 <div class="row">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Nom d'utilisateur</label>
                         <input type="text" class="form-control" name="username" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Mot de passe</label>
                         <input type="password" class="form-control" name="password" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <label class="form-label">Rôle</label>
+                        <select class="form-select" name="role" required>
+                            <option value="operateur">Opérateur</option>
+                            <option value="chef_equipe">Chef d'équipe</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label">&nbsp;</label>
                         <button type="submit" class="btn btn-primary d-block">Créer</button>
                     </div>
@@ -110,11 +118,8 @@
 
     <!-- Section Liste utilisateurs -->
     <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card-header">
             <h5 class="mb-0"><i class="fas fa-users me-2"></i>Utilisateurs</h5>
-            <button id="validate-changes-btn" class="btn btn-success" style="display: none;">
-                <i class="fas fa-check me-2"></i>Valider les modifications
-            </button>
         </div>
         <div class="card-body">
             <div class="table-responsive">
@@ -122,6 +127,7 @@
                     <thead>
                         <tr>
                             <th>Utilisateur</th>
+                            <th>Rôle</th>
                             {% for page in page_names %}
                             <th class="text-center">{{ page.replace('_', ' ').title() }}</th>
                             {% endfor %}
@@ -132,6 +138,15 @@
                         {% for user in users %}
                         <tr data-user-id="{{ user.id }}">
                             <td>{{ user.username }}</td>
+                            <td>
+                                {% if user.role == 'admin' %}
+                                    <span class="badge bg-danger">Admin</span>
+                                {% elif user.role == 'chef_equipe' %}
+                                    <span class="badge bg-warning">Chef d'équipe</span>
+                                {% else %}
+                                    <span class="badge bg-info">Opérateur</span>
+                                {% endif %}
+                            </td>
                             {% for page in page_names %}
                                 {% set access = (user.page_accesses | selectattr('page_name', 'equalto', page) | list | first) %}
                                 <td class="text-center">
@@ -174,6 +189,14 @@
             <input type="text" class="form-control" name="username" required>
           </div>
           <div class="mb-3">
+            <label class="form-label">Rôle</label>
+            <select class="form-select" name="role" required>
+              <option value="operateur">Opérateur</option>
+              <option value="chef_equipe">Chef d'équipe</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="mb-3">
             <label class="form-label">Nouveau mot de passe (laisser vide pour ne pas changer)</label>
             <input type="password" class="form-control" name="password">
           </div>
@@ -190,13 +213,8 @@
   </div>
 </div>
 {% endblock %}
-
 {% block extra_js %}
 <script>
-// Variables globales pour gérer les modifications
-let pendingChanges = new Map(); // userId -> { original: {}, current: {} }
-let originalStates = new Map(); // userId -> { page: boolean }
-
 // Fonction de monitoring de la base de données
 function loadDatabaseStatus() {
     fetch('/api/database/status')
@@ -206,44 +224,97 @@ function loadDatabaseStatus() {
             let statusClass = 'success';
             let icon = 'check-circle';
             
-            if (data.total_size_mb > 100) {
+            if (data.status === 'warning') {
                 statusClass = 'warning';
                 icon = 'exclamation-triangle';
-            }
-            if (data.total_size_mb > 500) {
+            } else if (data.status === 'critical') {
                 statusClass = 'danger';
-                icon = 'times-circle';
+                icon = 'exclamation-circle';
             }
             
+            const progressBarClass = data.usage_percent > 80 ? 'bg-danger' : data.usage_percent > 60 ? 'bg-warning' : 'bg-success';
+            
             statusDiv.innerHTML = `
-                <div class="alert alert-${statusClass} d-flex align-items-center">
-                    <i class="fas fa-${icon} me-2"></i>
-                    <div>
-                        <strong>Taille totale:</strong> ${data.total_size_mb.toFixed(2)} MB<br>
-                        <small>
-                            Utilisateurs: ${data.counts.users} | 
-                            Relevés: ${data.counts.releves} | 
-                            Photos: ${data.counts.photos} | 
-                            Routines: ${data.counts.routines} |
-                            Codes Magasin: ${data.counts.codes_magasin}
-                        </small>
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="alert alert-${statusClass} mb-0">
+                            <i class="fas fa-${icon} me-2"></i>
+                            <strong>${data.message}</strong>
+                            <br>
+                            <small>Taille estimée: ${data.estimated_size_mb} MB (${data.usage_percent}% de 1GB)</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="alert alert-${data.db_color} mb-0">
+                            <i class="fas fa-${data.db_icon} me-2"></i>
+                            <strong>${data.db_type}</strong>
+                            <br>
+                            <small>Base de données active</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="row text-center">
+                            <div class="col-3">
+                                <div class="border rounded p-2">
+                                    <div class="h5 mb-0">${data.stats.releves}</div>
+                                    <small class="text-muted">Relevés</small>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="border rounded p-2">
+                                    <div class="h5 mb-0">${data.stats.photos}</div>
+                                    <small class="text-muted">Photos</small>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="border rounded p-2">
+                                    <div class="h5 mb-0">${data.stats.routines}</div>
+                                    <small class="text-muted">Routines</small>
+                                </div>
+                            </div>
+                            <div class="col-3">
+                                <div class="border rounded p-2">
+                                    <div class="h5 mb-0">${data.stats.users}</div>
+                                    <small class="text-muted">Utilisateurs</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar ${progressBarClass}" 
+                                 role="progressbar" 
+                                 style="width: ${data.usage_percent}%" 
+                                 aria-valuenow="${data.usage_percent}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                                ${data.usage_percent}% utilisé
+                            </div>
+                        </div>
+                        <small class="text-muted">Utilisation de l'espace disque (${data.estimated_size_mb} MB / 1024 MB)</small>
                     </div>
                 </div>
             `;
         })
         .catch(error => {
             document.getElementById('db-status').innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="fas fa-times-circle me-2"></i>
-                    Erreur lors du chargement du statut
+                <div class="col-12">
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Erreur lors du chargement du statut
+                    </div>
                 </div>
             `;
         });
 }
 
 function cleanupDatabase() {
-    if (confirm('Lancer le nettoyage automatique de la base de données ?')) {
-        fetch('/api/database/cleanup', { method: 'POST' })
+    if (confirm('Lancer le nettoyage automatique ? Cela supprimera les anciennes données.')) {
+        fetch('/api/database/cleanup', {method: 'POST'})
             .then(r => r.json())
             .then(data => {
                 if (data.message) {
@@ -355,38 +426,26 @@ function reloadUsers() {
             users.forEach(user => {
                 let tr = document.createElement('tr');
                 tr.setAttribute('data-user-id', user.id);
-                
-                // Construire les cases à cocher avec les bonnes valeurs
-                let checkboxesHtml = '';
-                const pageNames = {{ page_names | tojson }};
-                pageNames.forEach(page => {
-                    // Vérifier si l'utilisateur a accès à cette page
-                    const hasAccess = user.page_accesses && user.page_accesses[page] === true;
-                    const isDisabled = user.role === 'admin';
-                    checkboxesHtml += `
-                        <td class="text-center">
-                            <input type="checkbox" class="form-check-input page-access-checkbox" data-page="${page}"
-                                ${hasAccess ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
-                        </td>
-                    `;
-                });
-                
+                const roleBadge = user.role === 'admin' ? '<span class="badge bg-danger">Admin</span>' :
+                                 user.role === 'chef_equipe' ? '<span class="badge bg-warning">Chef d\'équipe</span>' :
+                                 '<span class="badge bg-info">Opérateur</span>';
                 tr.innerHTML = `
                     <td>${user.username}</td>
-                    ${checkboxesHtml}
+                    <td>${roleBadge}</td>
+                    {% for page in page_names %}
+                        {% set access = (user.page_accesses | selectattr('page_name', 'equalto', page) | list | first) %}
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input page-access-checkbox" data-page="{{ page }}"
+                                {% if access and access.can_access %}checked{% endif %}
+                                {% if user.role == 'admin' %}disabled{% endif %}>
+                        </td>
+                    {% endfor %}
                     <td>
                         ${user.role !== 'admin' ? '<span class="edit-user-btn" title="Modifier" style="cursor:pointer; margin-right: 4px; vertical-align:middle; display:inline-block;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#1976d2"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-2.828 0L5 12.828a2 2 0 010-2.828L9 13z"/></svg></span>' : ''}
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
-            
-            // Réinitialiser les états après rechargement
-            pendingChanges.clear();
-            originalStates.clear();
-            document.getElementById('validate-changes-btn').style.display = 'none';
-            
-            // Rebind les événements
             bindCheckboxEvents();
         });
 }
@@ -396,7 +455,8 @@ document.getElementById('create-user-form').addEventListener('submit', function(
     const form = e.target;
     const data = {
         username: form.username.value,
-        password: form.password.value
+        password: form.password.value,
+        role: form.role.value
     };
     fetch('/api/utilisateurs', {
         method: 'POST',
@@ -415,90 +475,44 @@ document.getElementById('create-user-form').addEventListener('submit', function(
     });
 });
 
-// Gestion dynamique des cases à cocher (droits)
-function bindCheckboxEvents() {
-    document.querySelectorAll('.page-access-checkbox').forEach(cb => {
-        cb.addEventListener('change', function() {
-            const tr = this.closest('tr');
-            const userId = tr.getAttribute('data-user-id');
-            const page = this.getAttribute('data-page');
-            const isChecked = this.checked;
-            
-            // Initialiser les états si nécessaire
-            if (!originalStates.has(userId)) {
-                const checkboxes = tr.querySelectorAll('.page-access-checkbox');
-                const original = {};
-                checkboxes.forEach(checkbox => {
-                    original[checkbox.getAttribute('data-page')] = checkbox.checked;
+document.querySelector('table').addEventListener('click', function(e) {
+    if (e.target.closest('.delete-user-btn')) {
+        const tr = e.target.closest('tr');
+        const userId = tr.getAttribute('data-user-id');
+        if (confirm('Supprimer cet utilisateur ?')) {
+            fetch(`/api/utilisateurs/${userId}`, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        reloadUsers();
+                        alert('Utilisateur supprimé');
+                    } else {
+                        alert(res.error || 'Erreur lors de la suppression');
+                    }
                 });
-                originalStates.set(userId, original);
-            }
-            
-            // Marquer comme modifié
-            if (!pendingChanges.has(userId)) {
-                pendingChanges.set(userId, {
-                    original: { ...originalStates.get(userId) },
-                    current: { ...originalStates.get(userId) }
-                });
-            }
-            
-            pendingChanges.get(userId).current[page] = isChecked;
-            
-            // Afficher le bouton de validation
-            const validateBtn = document.getElementById('validate-changes-btn');
-            if (pendingChanges.size > 0) {
-                validateBtn.style.display = 'inline-block';
+        }
+    }
+});
+
+document.querySelectorAll('.page-access-checkbox').forEach(function(checkbox) {
+    checkbox.addEventListener('change', function() {
+        const userId = this.closest('tr').getAttribute('data-user-id');
+        const page = this.getAttribute('data-page');
+        const canAccess = this.checked;
+        fetch(`/api/utilisateurs/${userId}/droits`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ [page]: canAccess })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                alert('Erreur lors de la modification du droit : ' + (data.error || 'inconnue'));
+                this.checked = !canAccess; // rollback si erreur
             }
         });
     });
-}
-
-// Fonction pour valider les modifications
-function validateChanges() {
-    const promises = [];
-    
-    pendingChanges.forEach((changes, userId) => {
-        const data = changes.current;
-        console.log(`Envoi des droits pour l'utilisateur ${userId}:`, data);
-        promises.push(
-            fetch(`/api/utilisateurs/${userId}/droits`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            })
-            .then(r => r.json())
-            .then(res => {
-                if (!res.success) {
-                    throw new Error(res.error || 'Erreur lors de la modification des droits');
-                }
-                return { userId, success: true };
-            })
-            .catch(error => {
-                return { userId, success: false, error: error.message };
-            })
-        );
-    });
-    
-    Promise.all(promises).then(results => {
-        const errors = results.filter(r => !r.success);
-        if (errors.length > 0) {
-            alert('Erreurs lors de la validation : ' + errors.map(e => e.error).join(', '));
-            // En cas d'erreur, on recharge pour revenir à l'état initial
-            reloadUsers();
-        } else {
-            alert('Modifications validées avec succès !');
-            // Réinitialiser les états
-            pendingChanges.clear();
-            originalStates.clear();
-            document.getElementById('validate-changes-btn').style.display = 'none';
-            // Ne pas recharger automatiquement, laisser l'utilisateur voir les changements
-            console.log('Validation réussie, états réinitialisés');
-        }
-    });
-}
-
-// Événement pour le bouton de validation
-document.getElementById('validate-changes-btn').addEventListener('click', validateChanges);
+});
 
 // MODIFICATION/SUPPRESSION UTILISATEUR AVEC SVG
 let editUserModal = new bootstrap.Modal(document.getElementById('editUserModal'));
@@ -508,9 +522,15 @@ document.querySelector('table').addEventListener('click', function(e) {
         const tr = e.target.closest('tr');
         const userId = tr.getAttribute('data-user-id');
         const username = tr.children[0].textContent;
+        const roleBadge = tr.children[1].textContent.trim();
+        // Extraire le rôle depuis le badge
+        let role = 'operateur';
+        if (roleBadge.includes('Admin')) role = 'admin';
+        else if (roleBadge.includes('Chef')) role = 'chef_equipe';
         const form = document.getElementById('edit-user-form');
         form.user_id.value = userId;
         form.username.value = username;
+        form.role.value = role;
         const deleteBtn = document.getElementById('delete-user-modal-btn');
         if (username.trim() === 'admin') {
             deleteBtn.style.display = 'none';
@@ -523,15 +543,17 @@ document.querySelector('table').addEventListener('click', function(e) {
         editUserModal.show();
     }
 });
-
 document.getElementById('edit-user-form').addEventListener('submit', function(e) {
     e.preventDefault();
     const form = e.target;
     const userId = form.user_id.value;
     const data = {
         username: form.username.value,
-        password: form.password.value
+        role: form.role.value
     };
+    if (form.password.value) {
+        data.password = form.password.value;
+    }
     fetch(`/api/utilisateurs/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -541,6 +563,7 @@ document.getElementById('edit-user-form').addEventListener('submit', function(e)
     .then(res => {
         if (res.success) {
             reloadUsers();
+            setTimeout(bindCheckboxEvents, 100);
             editUserModal.hide();
             alert('Utilisateur modifié !');
         } else {
@@ -559,6 +582,7 @@ document.getElementById('delete-user-modal-btn').addEventListener('click', funct
             .then(res => {
                 if (res.success) {
                     reloadUsers();
+                    setTimeout(bindCheckboxEvents, 100);
                     editUserModal.hide();
                     alert('Utilisateur supprimé');
                 } else {
@@ -568,11 +592,36 @@ document.getElementById('delete-user-modal-btn').addEventListener('click', funct
     }
 });
 
+// Gestion dynamique des cases à cocher (droits)
+function bindCheckboxEvents() {
+    document.querySelectorAll('.page-access-checkbox').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const tr = this.closest('tr');
+            const userId = tr.getAttribute('data-user-id');
+            const checkboxes = tr.querySelectorAll('.page-access-checkbox');
+            const data = {};
+            checkboxes.forEach(checkbox => {
+                data[checkbox.getAttribute('data-page')] = checkbox.checked;
+            });
+            fetch(`/api/utilisateurs/${userId}/droits`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (!res.success) {
+                    alert(res.error || 'Erreur lors de la modification des droits');
+                }
+            });
+        });
+    });
+}
+
 // Initialiser les événements
 bindCheckboxEvents();
 </script>
 {% endblock %}
-
 {% block extra_css %}
 <style>
 @media (max-width: 768px) {

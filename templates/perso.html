@@ -1,0 +1,2635 @@
+{% extends "base.html" %}
+{% block title %}Perso{% endblock %}
+{% block extra_css %}
+<style>
+    /* Planning global en pleine largeur */
+    .planning-global-fullwidth {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        background: var(--flot-bg);
+        overflow: auto;
+    }
+    .planning-global-fullwidth .card {
+        margin: 0;
+        border: none;
+        border-radius: 15px;
+        display: flex;
+        flex-direction: column;
+    }
+    .planning-global-fullwidth .card-body {
+        flex: 1;
+        overflow: auto;
+        padding: 0 !important;
+    }
+    .planning-global-fullwidth table {
+        font-size: 0.55rem;
+        white-space: nowrap;
+        table-layout: fixed;
+        width: 100%;
+    }
+    .planning-global-fullwidth th:not(:first-child),
+    .planning-global-fullwidth td:not(:first-child) {
+        padding: 0.05rem 0.08rem !important;
+        font-size: 0.5rem;
+        width: 10px !important;
+        min-width: 10px !important;
+        max-width: 10px !important;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .planning-global-fullwidth th:first-child,
+    .planning-global-fullwidth td:first-child {
+        width: 70px !important;
+        min-width: 70px !important;
+        max-width: 70px !important;
+        position: sticky;
+        left: 0;
+        background: white;
+        z-index: 10;
+        text-align: left;
+        padding: 0.1rem 0.2rem !important;
+        font-size: 0.6rem !important;
+    }
+    .planning-global-fullwidth thead th:first-child {
+        background: #f8f9fa;
+    }
+    .planning-global-fullwidth .card-header {
+        padding: 0.4rem 0.8rem;
+    }
+    .planning-global-fullwidth .card-header h5 {
+        font-size: 0.9rem;
+    }
+    .planning-global-fullwidth .table-responsive {
+        overflow-x: visible !important;
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    {% if is_manager %}
+    <!-- Interface Manager -->
+    <ul class="nav nav-tabs mb-4" id="managerTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="personnel-tab" data-bs-toggle="tab" data-bs-target="#personnel" type="button" role="tab">
+                <i class="fas fa-users me-2"></i>Personnel
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="conges-tab" data-bs-toggle="tab" data-bs-target="#conges" type="button" role="tab">
+                <i class="fas fa-calendar-alt me-2"></i>Congé
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="absences-tab" data-bs-toggle="tab" data-bs-target="#absences" type="button" role="tab">
+                <i class="fas fa-user-times me-2"></i>Absences
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="planning-global-tab" data-bs-toggle="tab" data-bs-target="#planning-global" type="button" role="tab">
+                <i class="fas fa-calendar-check me-2"></i>Planning global
+            </button>
+        </li>
+    </ul>
+    
+    <div class="tab-content" id="managerTabContent">
+        <!-- Onglet Personnel -->
+        <div class="tab-pane fade show active" id="personnel" role="tabpanel">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-user-plus me-2"></i>Créer un membre du personnel</h5>
+                    <button class="btn btn-sm btn-primary" onclick="showCreatePersonnelModal()">
+                        <i class="fas fa-plus me-1"></i>Nouveau
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="personnel-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-center">Nom</th>
+                                    <th class="text-center">Prénom</th>
+                                    <th class="text-center">Email</th>
+                                    <th class="text-center">Téléphone</th>
+                                    <th class="text-center">Poste</th>
+                                    <th class="text-center">Société</th>
+                                    <th class="text-center">Documents</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="personnel-tbody">
+                                <tr>
+                                    <td colspan="8" class="text-center">Chargement...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Onglet Congé -->
+        <div class="tab-pane fade" id="conges" role="tabpanel">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Congé</h5>
+                    <button class="btn btn-sm btn-secondary" onclick="document.getElementById('signature-upload').click()" title="Uploader votre signature">
+                        <i class="fas fa-signature"></i> Signature
+                    </button>
+                    <input type="file" id="signature-upload" accept="image/*" style="display: none;" onchange="uploadSignature(event)">
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Personnel</th>
+                                    <th>Date début</th>
+                                    <th>Date fin</th>
+                                    <th>Type</th>
+                                    <th>Statut</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="conges-tbody">
+                                <tr>
+                                    <td colspan="6" class="text-center">Chargement...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Onglet Absences -->
+        <div class="tab-pane fade" id="absences" role="tabpanel">
+            <!-- Section: Rappel des absences à venir -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-calendar-check me-2"></i>Rappel des absences à venir (mois en cours et mois suivant)</h5>
+                    <button class="btn btn-sm btn-primary" onclick="showCreateAbsenceModal()">
+                        <i class="fas fa-plus me-1"></i>Nouvelle absence
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Personnel</th>
+                                    <th>Date début</th>
+                                    <th>Date fin</th>
+                                    <th>Type</th>
+                                    <th>Statut</th>
+                                    <th>Commentaire</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="absences-avenir-tbody">
+                                <tr>
+                                    <td colspan="7" class="text-center">Chargement...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Onglet Planning global -->
+        <div class="tab-pane fade" id="planning-global" role="tabpanel">
+            <div class="planning-global-fullwidth">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-calendar-check me-2"></i>Planning global mensuel</h5>
+                        <div class="d-flex gap-2">
+                            <select class="form-select form-select-sm" id="planning-global-equipe-select" style="width: auto; min-width: 150px;" onchange="filterByEquipe()">
+                                <option value="">Toutes les équipes</option>
+                                <option value="1">SMP</option>
+                                <option value="2">LPZ</option>
+                            </select>
+                            <input type="hidden" id="planning-global-month" onchange="loadPlanningGlobal()">
+                            <button class="btn btn-sm btn-secondary" onclick="previousMonthGlobal()">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button class="btn btn-sm btn-secondary" onclick="nextMonthGlobal()">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="planning-global-content" style="width: 100%; overflow-x: auto;">
+                            <div class="text-center p-3">
+                                <div class="spinner-border" role="status"><span class="visually-hidden">Chargement...</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <!-- Interface Personnel/Chef d'équipe -->
+    <ul class="nav nav-tabs mb-4" id="personnelTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="recap-tab" data-bs-toggle="tab" data-bs-target="#mon-recap" type="button" role="tab">
+                <i class="fas fa-user me-2"></i>Mon récapitulatif
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="conges-tab" data-bs-toggle="tab" data-bs-target="#mes-conges" type="button" role="tab">
+                <i class="fas fa-calendar-alt me-2"></i>Mes congés
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="documents-tab" data-bs-toggle="tab" data-bs-target="#mes-documents" type="button" role="tab">
+                <i class="fas fa-file-alt me-2"></i>Mes documents
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="planning-personnel-tab" data-bs-toggle="tab" data-bs-target="#planning-personnel" type="button" role="tab">
+                <i class="fas fa-calendar-check me-2"></i>Planning mensuel
+            </button>
+        </li>
+    </ul>
+    
+    <div class="tab-content" id="personnelTabContent">
+        <!-- Onglet Mon récapitulatif -->
+        <div class="tab-pane fade show active" id="mon-recap" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-user me-2"></i>Mon récapitulatif</h5>
+                </div>
+                <div class="card-body">
+                    <div id="mon-recap-content">
+                        <div class="text-center p-3">
+                            <div class="spinner-border" role="status"><span class="visually-hidden">Chargement...</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Onglet Mes congés -->
+        <div class="tab-pane fade" id="mes-conges" role="tabpanel">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Mes congés</h5>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-secondary" onclick="document.getElementById('signature-upload-personnel').click()" title="Uploader votre signature">
+                            <i class="fas fa-signature"></i> Signature
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="showCreateCongeModal()">
+                            <i class="fas fa-plus me-1"></i>Nouvelle demande
+                        </button>
+                    </div>
+                    <input type="file" id="signature-upload-personnel" accept="image/*" style="display: none;" onchange="uploadSignature(event)">
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date début</th>
+                                    <th>Date fin</th>
+                                    <th>Type</th>
+                                    <th>Statut</th>
+                                    <th>Commentaire</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mes-conges-tbody">
+                                <tr>
+                                    <td colspan="5" class="text-center">Chargement...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Onglet Mes documents -->
+        <div class="tab-pane fade" id="mes-documents" role="tabpanel">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Mes documents</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Nom du fichier</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Date d'ajout</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mes-documents-tbody">
+                                <tr>
+                                    <td colspan="5" class="text-center">Chargement...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Onglet Planning mensuel -->
+        <div class="tab-pane fade" id="planning-personnel" role="tabpanel">
+            <div class="planning-global-fullwidth">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-calendar-check me-2"></i>Planning global mensuel</h5>
+                        <div class="d-flex gap-2">
+                            <select class="form-select form-select-sm" id="planning-personnel-equipe-select" style="width: auto; min-width: 150px;" onchange="filterByEquipePersonnel()">
+                                <option value="">Toutes les équipes</option>
+                                <option value="1">SMP</option>
+                                <option value="2">LPZ</option>
+                            </select>
+                            <input type="month" class="form-control form-control-sm" id="planning-personnel-month" style="width: auto;" onchange="loadPlanningPersonnel()">
+                            <button class="btn btn-sm btn-secondary" onclick="previousMonthPersonnel()">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <button class="btn btn-sm btn-secondary" onclick="nextMonthPersonnel()">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="planning-personnel-content" style="width: 100%; overflow-x: auto;">
+                            <div class="text-center p-3">
+                                <div class="spinner-border" role="status"><span class="visually-hidden">Chargement...</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modals -->
+<!-- Modal Créer/Modifier Personnel (Manager) -->
+<div class="modal fade" id="personnelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="personnelModalTitle">Créer un membre du personnel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="personnel-form">
+                    <input type="hidden" id="personnel-id">
+                    <div class="mb-3">
+                        <label class="form-label">Utilisateur</label>
+                        <select class="form-select" id="personnel-user-id" required>
+                            <option value="">Sélectionner un utilisateur</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nom</label>
+                        <input type="text" class="form-control" id="personnel-nom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Prénom</label>
+                        <input type="text" class="form-control" id="personnel-prenom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="personnel-email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Téléphone</label>
+                        <input type="text" class="form-control" id="personnel-telephone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date d'embauche</label>
+                        <input type="date" class="form-control" id="personnel-date-embauche">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Poste</label>
+                        <input type="text" class="form-control" id="personnel-poste">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Société d'appartenance</label>
+                        <input type="text" class="form-control" id="personnel-societe">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Équipe</label>
+                        <select class="form-select" id="personnel-site-id">
+                            <option value="">Aucune équipe</option>
+                            <option value="1">SMP</option>
+                            <option value="2">LPZ</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="savePersonnel()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Jours travaillés (Manager) -->
+<div class="modal fade" id="joursTravaillesModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Définir les jours travaillés</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="jours-travailles-form">
+                    <input type="hidden" id="jours-personnel-id">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Jour</th>
+                                    <th>Type de journée</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Lundi</td>
+                                    <td>
+                                        <select class="form-select jour-type" data-jour="0">
+                                            <option value="">Non travaillé</option>
+                                            <option value="matin">Matin</option>
+                                            <option value="apres_midi">Après-midi</option>
+                                            <option value="journee">Journée</option>
+                                            <option value="nuit">Nuit</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Mardi</td>
+                                    <td>
+                                        <select class="form-select jour-type" data-jour="1">
+                                            <option value="">Non travaillé</option>
+                                            <option value="matin">Matin</option>
+                                            <option value="apres_midi">Après-midi</option>
+                                            <option value="journee">Journée</option>
+                                            <option value="nuit">Nuit</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Mercredi</td>
+                                    <td>
+                                        <select class="form-select jour-type" data-jour="2">
+                                            <option value="">Non travaillé</option>
+                                            <option value="matin">Matin</option>
+                                            <option value="apres_midi">Après-midi</option>
+                                            <option value="journee">Journée</option>
+                                            <option value="nuit">Nuit</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Jeudi</td>
+                                    <td>
+                                        <select class="form-select jour-type" data-jour="3">
+                                            <option value="">Non travaillé</option>
+                                            <option value="matin">Matin</option>
+                                            <option value="apres_midi">Après-midi</option>
+                                            <option value="journee">Journée</option>
+                                            <option value="nuit">Nuit</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Vendredi</td>
+                                    <td>
+                                        <select class="form-select jour-type" data-jour="4">
+                                            <option value="">Non travaillé</option>
+                                            <option value="matin">Matin</option>
+                                            <option value="apres_midi">Après-midi</option>
+                                            <option value="journee">Journée</option>
+                                            <option value="nuit">Nuit</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Samedi</td>
+                                    <td>
+                                        <select class="form-select jour-type" data-jour="5">
+                                            <option value="">Non travaillé</option>
+                                            <option value="matin">Matin</option>
+                                            <option value="apres_midi">Après-midi</option>
+                                            <option value="journee">Journée</option>
+                                            <option value="nuit">Nuit</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>Dimanche</td>
+                                    <td>
+                                        <select class="form-select jour-type" data-jour="6">
+                                            <option value="">Non travaillé</option>
+                                            <option value="matin">Matin</option>
+                                            <option value="apres_midi">Après-midi</option>
+                                            <option value="journee">Journée</option>
+                                            <option value="nuit">Nuit</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveJoursTravailles()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Ajouter Document (Manager) -->
+<div class="modal fade" id="documentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ajouter un document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="document-form" enctype="multipart/form-data">
+                    <input type="hidden" id="document-personnel-id">
+                    <div class="mb-3">
+                        <label class="form-label">Fichier</label>
+                        <input type="file" class="form-control" id="document-file" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type de document</label>
+                        <input type="text" class="form-control" id="document-type">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="document-description" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveDocument()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Congé -->
+<div class="modal fade" id="congeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nouveau congé</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="conge-form">
+                    <div class="mb-3">
+                        <label class="form-label">Date début</label>
+                        <input type="date" class="form-control" id="conge-date-debut" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date fin</label>
+                        <input type="date" class="form-control" id="conge-date-fin" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type de congé</label>
+                        <select class="form-select" id="conge-type" required>
+                            <option value="conge_paye">Congé payé</option>
+                            <option value="conge_sans_solde">Congé sans solde</option>
+                            <option value="autre">Autre</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Commentaire</label>
+                        <textarea class="form-control" id="conge-commentaire" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveConge()">Envoyer la demande</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Voir Documents -->
+<div class="modal fade" id="viewDocumentsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="view-documents-title">Documents</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="view-documents-body">
+                <div class="text-center">Chargement...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Absence (Manager) -->
+<div class="modal fade" id="absenceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Créer une absence</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="absence-form">
+                    <div class="mb-3">
+                        <label class="form-label">Personnel</label>
+                        <select class="form-select" id="absence-personnel-id" required>
+                            <option value="">Sélectionner un membre du personnel</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date début</label>
+                        <input type="date" class="form-control" id="absence-date-debut" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date fin</label>
+                        <input type="date" class="form-control" id="absence-date-fin" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type d'absence</label>
+                        <select class="form-select" id="absence-type" required>
+                            <option value="justifiee">Absence justifiée</option>
+                            <option value="injustifiee">Absence injustifiée</option>
+                            <option value="formation">Formation</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Commentaire</label>
+                        <textarea class="form-control" id="absence-commentaire" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveAbsence()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Formations -->
+<div class="modal fade" id="formationsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="formationsModalTitle">Formations</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="formationsModalBody">
+                <div class="text-center">Chargement...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Créer/Modifier Formation -->
+<div class="modal fade" id="formationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="formationModalTitle">Nouvelle formation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formation-form">
+                    <input type="hidden" id="formation-id">
+                    <input type="hidden" id="formation-personnel-id">
+                    <div class="mb-3">
+                        <label class="form-label">Type *</label>
+                        <select class="form-select" id="formation-type" required onchange="toggleDateFinValidite()">
+                            <option value="demande">Demande de formation</option>
+                            <option value="formation_obtenue">Formation obtenue</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nom de la formation *</label>
+                        <input type="text" class="form-control" id="formation-nom" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date début *</label>
+                        <input type="date" class="form-control" id="formation-date-debut" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Date fin *</label>
+                        <input type="date" class="form-control" id="formation-date-fin" required>
+                    </div>
+                    <div class="mb-3" id="date-fin-validite-container" style="display: none;">
+                        <label class="form-label">Date de fin de validité *</label>
+                        <input type="date" class="form-control" id="formation-date-fin-validite">
+                        <small class="form-text text-muted">Date jusqu'à laquelle la formation est valide</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Statut</label>
+                        <select class="form-select" id="formation-statut">
+                            <option value="prevue">Prévue</option>
+                            <option value="realisee">Réalisée</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="formation-description" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveFormation()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Documents Formation -->
+<div class="modal fade" id="formationDocumentsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="formationDocumentsModalTitle">Documents de la formation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formation-document-form" enctype="multipart/form-data">
+                    <input type="hidden" id="formation-document-formation-id">
+                    <div class="mb-3">
+                        <label class="form-label">Fichier *</label>
+                        <input type="file" class="form-control" id="formation-document-file" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type de document</label>
+                        <input type="text" class="form-control" id="formation-document-type" placeholder="Certificat, Attestation, etc.">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="formation-document-description" rows="3"></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="saveFormationDocument()">Ajouter le document</button>
+                </form>
+                <hr>
+                <div id="formation-documents-list">
+                    <div class="text-center">Chargement...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPersonnelId = null;
+let currentPersonnelUserId = null;
+
+// Initialisation
+document.addEventListener('DOMContentLoaded', function() {
+    {% if is_manager %}
+    loadPersonnel();
+    loadConges();
+    loadAbsences();
+    loadUtilisateursDisponibles();
+    initPlanningGlobal();
+    
+    // Charger le planning global quand on clique sur l'onglet
+    const planningGlobalTab = document.getElementById('planning-global-tab');
+    if (planningGlobalTab) {
+        planningGlobalTab.addEventListener('shown.bs.tab', function() {
+            const select = document.getElementById('planning-global-equipe-select');
+            const siteId = select && select.value ? select.value : null;
+            loadPlanningGlobal(null, siteId);
+        });
+    }
+    {% else %}
+    // Pour les opérateurs/chefs d'équipe
+    loadMonProfil();
+    loadMesConges();
+    initPlanningPersonnel();
+    
+    // Charger les documents quand on clique sur l'onglet
+    const documentsTab = document.getElementById('documents-tab');
+    if (documentsTab) {
+        documentsTab.addEventListener('shown.bs.tab', function() {
+            loadMesDocuments();
+        });
+    }
+    
+    // Charger le planning personnel quand on clique sur l'onglet
+    const planningPersonnelTab = document.getElementById('planning-personnel-tab');
+    if (planningPersonnelTab) {
+        planningPersonnelTab.addEventListener('shown.bs.tab', function() {
+            const select = document.getElementById('planning-personnel-equipe-select');
+            const siteId = select && select.value ? select.value : null;
+            loadPlanningPersonnel(null, siteId);
+        });
+    }
+    {% endif %}
+});
+
+// Fonction pour uploader la signature (accessible à tous : opérateurs, chefs d'équipe, managers)
+function uploadSignature(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    fetch('/api/perso/manager/signature', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            alert('Signature enregistrée avec succès !');
+        }
+        event.target.value = ''; // Réinitialiser l'input
+    })
+    .catch(error => {
+        console.error('Erreur lors de l\'upload de la signature:', error);
+        alert('Erreur lors de l\'upload de la signature');
+        event.target.value = '';
+    });
+}
+
+{% if is_manager %}
+// Manager functions
+function loadPersonnel() {
+    fetch('/api/perso/personnel')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('personnel-tbody');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun membre du personnel</td></tr>';
+                return;
+            }
+            // Charger le nombre de documents pour chaque personnel
+            Promise.all(data.map(p => 
+                fetch(`/api/perso/personnel/${p.id}/documents`)
+                    .then(r => r.json())
+                    .then(docs => ({...p, nb_documents: docs.length}))
+                    .catch(() => ({...p, nb_documents: 0}))
+            )).then(personnelWithDocs => {
+                tbody.innerHTML = personnelWithDocs.map(p => `
+                    <tr>
+                        <td>${p.nom}</td>
+                        <td>${p.prenom}</td>
+                        <td>${p.email || '-'}</td>
+                        <td>${p.telephone || '-'}</td>
+                        <td>${p.poste || '-'}</td>
+                        <td>${p.societe || '-'}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-info" onclick="viewDocuments(${p.id}, '${p.prenom} ${p.nom}')" title="Voir les documents">
+                                <i class="fas fa-file-alt"></i> <span class="ms-1">${p.nb_documents}</span>
+                            </button>
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Actions personnel">
+                                <button class="btn btn-outline-primary" onclick="editPersonnel(${p.id})" title="Modifier le profil">
+                                    <i class="fas fa-user-edit"></i>
+                                </button>
+                                <button class="btn btn-outline-info" onclick="editJoursTravailles(${p.id})" title="Jours travaillés">
+                                    <i class="fas fa-calendar-day"></i>
+                                </button>
+                                <button class="btn btn-outline-success" onclick="showDocumentModal(${p.id})" title="Ajouter un document">
+                                    <i class="fas fa-file-upload"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary" onclick="viewFormations(${p.id}, '${p.prenom} ${p.nom}')" title="Formations">
+                                    <i class="fas fa-graduation-cap"></i>
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="deletePersonnel(${p.id})" title="Supprimer le personnel">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            });
+        });
+}
+
+function loadUtilisateursDisponibles() {
+    fetch('/api/perso/utilisateurs-disponibles')
+        .then(r => r.json())
+        .then(data => {
+            const select = document.getElementById('personnel-user-id');
+            select.innerHTML = '<option value="">Sélectionner un utilisateur</option>' +
+                data.map(u => `<option value="${u.id}">${u.username} (${u.role})</option>`).join('');
+        });
+}
+
+function showCreatePersonnelModal() {
+    // Fermer toute instance existante et nettoyer le backdrop
+    const existingModal = bootstrap.Modal.getInstance(document.getElementById('personnelModal'));
+    if (existingModal) {
+        existingModal.hide();
+        // Attendre que le modal soit complètement fermé
+        document.getElementById('personnelModal').addEventListener('hidden.bs.modal', function onHidden() {
+            document.getElementById('personnelModal').removeEventListener('hidden.bs.modal', onHidden);
+            // Nettoyer le backdrop s'il reste
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => backdrop.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            // Ouvrir le modal
+            openPersonnelModal();
+        }, { once: true });
+    } else {
+        openPersonnelModal();
+    }
+    
+    function openPersonnelModal() {
+        document.getElementById('personnelModalTitle').textContent = 'Créer un membre du personnel';
+        document.getElementById('personnel-form').reset();
+        document.getElementById('personnel-id').value = '';
+        // Réactiver le champ utilisateur et le rendre required en mode création
+        document.getElementById('personnel-user-id').disabled = false;
+        document.getElementById('personnel-user-id').setAttribute('required', 'required');
+        loadUtilisateursDisponibles();
+        const modal = new bootstrap.Modal(document.getElementById('personnelModal'));
+        modal.show();
+    }
+}
+
+function editPersonnel(id) {
+    // Fermer toute instance existante et nettoyer le backdrop
+    const existingModal = bootstrap.Modal.getInstance(document.getElementById('personnelModal'));
+    if (existingModal) {
+        existingModal.hide();
+        // Attendre que le modal soit complètement fermé
+        document.getElementById('personnelModal').addEventListener('hidden.bs.modal', function onHidden() {
+            document.getElementById('personnelModal').removeEventListener('hidden.bs.modal', onHidden);
+            // Nettoyer le backdrop s'il reste
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            backdrops.forEach(backdrop => backdrop.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            // Charger les données et ouvrir le modal
+            loadAndOpenEditModal(id);
+        }, { once: true });
+    } else {
+        loadAndOpenEditModal(id);
+    }
+    
+    function loadAndOpenEditModal(id) {
+        fetch(`/api/perso/personnel`)
+            .then(r => r.json())
+            .then(data => {
+                const p = data.find(x => x.id === id);
+                if (!p) return;
+                document.getElementById('personnelModalTitle').textContent = 'Modifier le membre du personnel';
+                document.getElementById('personnel-id').value = p.id;
+                document.getElementById('personnel-nom').value = p.nom;
+                document.getElementById('personnel-prenom').value = p.prenom;
+                document.getElementById('personnel-email').value = p.email || '';
+                document.getElementById('personnel-telephone').value = p.telephone || '';
+                document.getElementById('personnel-date-embauche').value = p.date_embauche || '';
+                document.getElementById('personnel-poste').value = p.poste || '';
+                document.getElementById('personnel-societe').value = p.societe || '';
+                document.getElementById('personnel-site-id').value = p.site_id || '';
+                const userSelect = document.getElementById('personnel-user-id');
+                userSelect.value = p.user_id;
+                // Stocker la valeur dans un attribut data pour pouvoir la récupérer même si disabled
+                userSelect.setAttribute('data-user-id', p.user_id);
+                // Désactiver le champ mais ne pas le rendre required en mode édition
+                userSelect.disabled = true;
+                userSelect.removeAttribute('required');
+                const modal = new bootstrap.Modal(document.getElementById('personnelModal'));
+                modal.show();
+            });
+    }
+}
+
+function savePersonnel() {
+    const id = document.getElementById('personnel-id').value;
+    const userSelect = document.getElementById('personnel-user-id');
+    
+    // Récupérer la valeur du user_id même si le champ est disabled
+    let user_id = userSelect.value;
+    if (!user_id && id) {
+        // En mode édition, si le champ est disabled, récupérer la valeur depuis l'attribut
+        user_id = userSelect.getAttribute('data-user-id') || userSelect.value;
+    }
+    
+    const data = {
+        user_id: user_id,
+        nom: document.getElementById('personnel-nom').value,
+        prenom: document.getElementById('personnel-prenom').value,
+        email: document.getElementById('personnel-email').value,
+        telephone: document.getElementById('personnel-telephone').value,
+        date_embauche: document.getElementById('personnel-date-embauche').value,
+        poste: document.getElementById('personnel-poste').value,
+        societe: document.getElementById('personnel-societe').value,
+        site_id: document.getElementById('personnel-site-id').value || null
+    };
+    
+    // Validation
+    if (!id && !data.user_id) {
+        alert('Veuillez sélectionner un utilisateur');
+        return;
+    }
+    
+    const url = id ? `/api/perso/personnel/${id}` : '/api/perso/personnel';
+    const method = id ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => {
+        if (!r.ok) {
+            return r.text().then(text => {
+                throw new Error(`Erreur HTTP ${r.status}: ${text.substring(0, 100)}`);
+            });
+        }
+        return r.json();
+    })
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('personnelModal'));
+            if (modal) {
+                modal.hide();
+                // Nettoyer le backdrop après fermeture
+                document.getElementById('personnelModal').addEventListener('hidden.bs.modal', function onHidden() {
+                    document.getElementById('personnelModal').removeEventListener('hidden.bs.modal', onHidden);
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                }, { once: true });
+            }
+            loadPersonnel();
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de la sauvegarde: ' + error.message);
+    });
+}
+
+function deletePersonnel(id) {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce membre du personnel ?')) return;
+    fetch(`/api/perso/personnel/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Erreur: ' + data.error);
+            } else {
+                loadPersonnel();
+            }
+        });
+}
+
+function editJoursTravailles(personnelId) {
+    currentPersonnelId = personnelId;
+    fetch(`/api/perso/personnel/${personnelId}/jours-travailles`)
+        .then(r => r.json())
+        .then(data => {
+            // Réinitialiser les selects
+            document.querySelectorAll('.jour-type').forEach(select => {
+                select.value = '';
+            });
+            // Remplir avec les données existantes
+            data.forEach(j => {
+                const select = document.querySelector(`.jour-type[data-jour="${j.jour_semaine}"]`);
+                if (select) select.value = j.type_journee;
+            });
+            document.getElementById('jours-personnel-id').value = personnelId;
+            new bootstrap.Modal(document.getElementById('joursTravaillesModal')).show();
+        });
+}
+
+function saveJoursTravailles() {
+    const personnelId = document.getElementById('jours-personnel-id').value;
+    const jours = [];
+    document.querySelectorAll('.jour-type').forEach(select => {
+        if (select.value) {
+            jours.push({
+                jour_semaine: parseInt(select.dataset.jour),
+                type_journee: select.value
+            });
+        }
+    });
+    
+    fetch(`/api/perso/personnel/${personnelId}/jours-travailles`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({jours: jours})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            bootstrap.Modal.getInstance(document.getElementById('joursTravaillesModal')).hide();
+        }
+    });
+}
+
+// Fonction pour générer le lien mailto pour un congé validé
+function generateMailtoLink(conge) {
+    // Déterminer le destinataire selon l'équipe
+    let destinataire = '';
+    let nomDestinataire = '';
+    if (conge.personnel_site_id == 2) { // LPZ
+        destinataire = 'daniela.marsaletta@vinci-construction.com';
+        nomDestinataire = 'Daniela';
+    } else if (conge.personnel_site_id == 1) { // SMP
+        destinataire = 'a.aili@webuildgroup.fr';
+        nomDestinataire = 'Amandine';
+    } else {
+        // Par défaut si pas d'équipe définie
+        destinataire = 'a.aili@webuildgroup.fr';
+        nomDestinataire = 'Amandine';
+    }
+    
+    // Format des dates
+    const dateDebut = new Date(conge.date_debut);
+    const dateFin = new Date(conge.date_fin);
+    const dateDebutStr = dateDebut.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const dateFinStr = dateFin.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    
+    // Construire le corps du message
+    const corps = `Bonjour ${nomDestinataire},\n\nCi joint la demande de congé pour ${conge.personnel_prenom} ${conge.personnel_nom_complet}.\n\nDates : ${dateDebutStr} au ${dateFinStr}\nNb de jour : ${conge.nombre_jours}\n\nJe te remercie et te souhaite une bonne journée.\n\nCordialement,`;
+    
+    // Construire le lien mailto avec CC
+    let mailtoLink = `mailto:${destinataire}?`;
+    if (conge.personnel_email) {
+        mailtoLink += `cc=${encodeURIComponent(conge.personnel_email)}&`;
+    }
+    mailtoLink += `subject=${encodeURIComponent(`Demande de congé - ${conge.personnel_prenom} ${conge.personnel_nom_complet}`)}&`;
+    mailtoLink += `body=${encodeURIComponent(corps)}`;
+    
+    return mailtoLink;
+}
+
+function loadConges() {
+    fetch('/api/perso/conges')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('conges-tbody');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">Aucun congé</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(d => `
+                <tr>
+                    <td>${d.personnel_nom}</td>
+                    <td>${d.date_debut}</td>
+                    <td>${d.date_fin}</td>
+                    <td>${d.type_conge}</td>
+                    <td>
+                        <span class="badge bg-${d.statut === 'accepte' ? 'success' : d.statut === 'refuse' ? 'danger' : 'warning'}">
+                            ${d.statut}
+                        </span>
+                    </td>
+                    <td>
+                        ${d.statut === 'en_attente' ? `
+                            <button class="btn btn-sm btn-success me-1" onclick="updateCongeStatut(${d.id}, 'accepte')">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger me-1" onclick="updateCongeStatut(${d.id}, 'refuse')">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        ` : ''}
+                        ${d.statut === 'accepte' ? `
+                            <button class="btn btn-sm btn-info me-1" onclick="loadCongesPDFs(${d.id})" title="Voir les PDFs">
+                                <i class="fas fa-file-pdf"></i>
+                            </button>
+                            <a href="${generateMailtoLink(d)}" class="btn btn-sm btn-primary me-1" title="Envoyer par email">
+                                <i class="fas fa-envelope"></i>
+                            </a>
+                        ` : ''}
+                        <button class="btn btn-sm btn-danger" onclick="deleteConge(${d.id})" title="Supprimer">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        });
+}
+
+function updateCongeStatut(id, statut) {
+    fetch(`/api/perso/conges/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({statut: statut})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            loadConges();
+            // Recharger le planning global pour mettre à jour les couleurs (si l'onglet existe)
+            const planningMonthInput = document.getElementById('planning-global-month');
+            if (planningMonthInput) {
+                loadPlanningGlobal();
+            }
+            if (statut === 'accepte') {
+                alert('Congé accepté. Le PDF a été généré automatiquement.');
+            }
+        }
+    });
+}
+
+function loadCongesPDFs(congeId) {
+    fetch(`/api/perso/conges/${congeId}/pdfs`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Erreur: ' + data.error);
+                return;
+            }
+            
+            if (data.length === 0) {
+                alert('Aucun PDF disponible pour ce congé.');
+                return;
+            }
+            
+            // Créer une liste de PDFs avec liens de téléchargement
+            let pdfsList = '<div class="list-group">';
+            data.forEach(pdf => {
+                pdfsList += `
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>${pdf.nom_fichier}</span>
+                        <a href="/api/perso/conges/${congeId}/pdf/${pdf.id}" class="btn btn-sm btn-primary" download>
+                            <i class="fas fa-download"></i> Télécharger
+                        </a>
+                    </div>
+                `;
+            });
+            pdfsList += '</div>';
+            
+            // Afficher dans une modal ou un alert amélioré
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">PDFs disponibles</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            ${pdfsList}
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            modal.addEventListener('hidden.bs.modal', () => {
+                document.body.removeChild(modal);
+            });
+        })
+        .catch(error => {
+            console.error('Erreur lors du chargement des PDFs:', error);
+            alert('Erreur lors du chargement des PDFs');
+        });
+}
+
+function deleteConge(id) {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce congé ? Cette action est irréversible.')) {
+        return;
+    }
+    
+    fetch(`/api/perso/conges/${id}`, {
+        method: 'DELETE'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            loadConges();
+            // Recharger les absences à venir pour mettre à jour la liste (les congés acceptés y apparaissent)
+            loadAbsences();
+            // Recharger le planning global pour mettre à jour les couleurs et revenir au rythme normal (si l'onglet existe)
+            const select = document.getElementById('planning-global-equipe-select');
+            if (select) {
+                const siteId = select.value ? select.value : null;
+                loadPlanningGlobal(null, siteId);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Erreur lors de la suppression:', error);
+        alert('Erreur lors de la suppression du congé');
+    });
+}
+
+function loadAbsences() {
+    // Charger les absences à venir
+    fetch('/api/perso/absences?type=avenir')
+        .then(r => {
+            if (!r.ok) {
+                throw new Error(`Erreur HTTP: ${r.status}`);
+            }
+            return r.json();
+        })
+        .then(data => {
+            const tbody = document.getElementById('absences-avenir-tbody');
+            if (!tbody) {
+                console.error('Élément absences-avenir-tbody non trouvé');
+                return;
+            }
+            if (data.error) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">${data.error}</td></tr>`;
+                return;
+            }
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucune absence à venir</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(a => `
+                <tr>
+                    <td>${a.personnel_nom || 'Inconnu'}</td>
+                    <td>${a.date_debut || '-'}</td>
+                    <td>${a.date_fin || '-'}</td>
+                    <td>${a.type_absence || '-'}</td>
+                    <td>
+                        <span class="badge bg-success">Validée</span>
+                    </td>
+                    <td>${a.commentaire || '-'}</td>
+                    <td>
+                        ${a.source === 'absence' ? `
+                            <button class="btn btn-sm btn-danger" onclick="deleteAbsence(${a.id})" title="Supprimer">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : `
+                            <span class="text-muted"><small>Congé accepté</small></span>
+                        `}
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Erreur lors du chargement des absences à venir:', error);
+            const tbody = document.getElementById('absences-avenir-tbody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Erreur lors du chargement: ' + error.message + '</td></tr>';
+            }
+        });
+}
+
+function validerAbsence(id) {
+    if (!confirm('Valider cette absence ?')) return;
+    fetch(`/api/perso/absences/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({statut: 'validee'})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            loadAbsences();
+        }
+    });
+}
+
+function refuserAbsence(id) {
+    if (!confirm('Refuser cette absence ?')) return;
+    fetch(`/api/perso/absences/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({statut: 'refusee'})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            loadAbsences();
+        }
+    });
+}
+
+function showCreateAbsenceModal() {
+    fetch('/api/perso/personnel')
+        .then(r => r.json())
+        .then(data => {
+            const select = document.getElementById('absence-personnel-id');
+            select.innerHTML = '<option value="">Sélectionner un membre du personnel</option>' +
+                data.map(p => `<option value="${p.id}">${p.prenom} ${p.nom}</option>`).join('');
+            document.getElementById('absence-form').reset();
+            new bootstrap.Modal(document.getElementById('absenceModal')).show();
+        });
+}
+
+function saveAbsence() {
+    const data = {
+        personnel_id: parseInt(document.getElementById('absence-personnel-id').value),
+        date_debut: document.getElementById('absence-date-debut').value,
+        date_fin: document.getElementById('absence-date-fin').value,
+        type_absence: document.getElementById('absence-type').value,
+        commentaire: document.getElementById('absence-commentaire').value
+    };
+    
+    fetch('/api/perso/absences', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => {
+        if (!r.ok) {
+            return r.json().then(data => {
+                throw new Error(data.error || `Erreur HTTP: ${r.status}`);
+            });
+        }
+        return r.json();
+    })
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('absenceModal'));
+            if (modal) {
+                modal.hide();
+                // Nettoyer le backdrop après fermeture
+                document.getElementById('absenceModal').addEventListener('hidden.bs.modal', function onHidden() {
+                    document.getElementById('absenceModal').removeEventListener('hidden.bs.modal', onHidden);
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => backdrop.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                }, { once: true });
+            }
+            loadAbsences();
+            // Recharger le planning global pour afficher l'absence (si l'onglet existe)
+            const planningMonthInput = document.getElementById('planning-global-month');
+            if (planningMonthInput) {
+                loadPlanningGlobal();
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Erreur lors de la sauvegarde de l\'absence:', error);
+        alert('Erreur lors de la sauvegarde: ' + error.message);
+    });
+}
+
+function deleteAbsence(id) {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette absence ?')) return;
+    fetch(`/api/perso/absences/${id}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Erreur: ' + data.error);
+            } else {
+                loadAbsences();
+                // Recharger le planning global pour mettre à jour l'affichage (si l'onglet existe)
+                const planningMonthInput = document.getElementById('planning-global-month');
+                if (planningMonthInput) {
+                    loadPlanningGlobal();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Erreur lors de la suppression de l\'absence:', error);
+            alert('Erreur lors de la suppression: ' + error.message);
+        });
+}
+
+function showDocumentModal(personnelId) {
+    document.getElementById('document-personnel-id').value = personnelId;
+    document.getElementById('document-form').reset();
+    new bootstrap.Modal(document.getElementById('documentModal')).show();
+}
+
+function saveDocument() {
+    const formData = new FormData();
+    formData.append('file', document.getElementById('document-file').files[0]);
+    formData.append('type_document', document.getElementById('document-type').value);
+    formData.append('description', document.getElementById('document-description').value);
+    
+    const personnelId = document.getElementById('document-personnel-id').value;
+    
+    fetch(`/api/perso/personnel/${personnelId}/documents`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            bootstrap.Modal.getInstance(document.getElementById('documentModal')).hide();
+        }
+    });
+}
+
+function viewPlanning(personnelId) {
+    // Rediriger vers l'onglet planning global avec focus sur ce personnel
+    const tabElement = document.getElementById('planning-global-tab');
+    if (tabElement) {
+        const tab = new bootstrap.Tab(tabElement);
+        tab.show();
+        setTimeout(() => {
+            loadPlanningGlobal(personnelId);
+        }, 300);
+    }
+}
+
+function viewDocuments(personnelId, personnelNom) {
+    fetch(`/api/perso/personnel/${personnelId}/documents`)
+        .then(r => r.json())
+        .then(data => {
+            const modalBody = document.getElementById('view-documents-body');
+            if (data.length === 0) {
+                modalBody.innerHTML = '<p class="text-center">Aucun document</p>';
+            } else {
+                modalBody.innerHTML = `
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Nom du fichier</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Date d'ajout</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.map(d => `
+                                    <tr>
+                                        <td>${d.nom_fichier}</td>
+                                        <td>${d.type_document || '-'}</td>
+                                        <td>${d.description || '-'}</td>
+                                        <td>${new Date(d.created_at).toLocaleDateString('fr-FR')}</td>
+                                        <td>
+                                            <a href="/api/perso/documents/${d.id}/download" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            document.getElementById('view-documents-title').textContent = `Documents de ${personnelNom}`;
+            new bootstrap.Modal(document.getElementById('viewDocumentsModal')).show();
+        });
+}
+
+function viewFormations(personnelId, personnelNom) {
+    fetch(`/api/perso/personnel/${personnelId}/formations`)
+        .then(r => r.json())
+        .then(data => {
+            const modalBody = document.getElementById('formationsModalBody');
+            const modalTitle = document.getElementById('formationsModalTitle');
+            modalTitle.textContent = `Formations de ${personnelNom}`;
+            
+            let html = `
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6>Liste des formations</h6>
+                    <button class="btn btn-sm btn-primary" onclick="showCreateFormationModal(${personnelId})">
+                        <i class="fas fa-plus me-1"></i>Nouvelle formation
+                    </button>
+                </div>
+            `;
+            
+            if (data.length === 0) {
+                html += '<p class="text-center text-muted">Aucune formation</p>';
+            } else {
+                html += '<div class="table-responsive"><table class="table table-striped">';
+                html += '<thead><tr><th>Type</th><th>Nom</th><th>Date début</th><th>Date fin</th><th>Fin validité</th><th>Statut</th><th>Documents</th><th>Actions</th></tr></thead><tbody>';
+                
+                data.forEach(f => {
+                    const typeBadge = f.type_formation === 'formation_obtenue' ? 'bg-info' : 'bg-secondary';
+                    const typeText = f.type_formation === 'formation_obtenue' ? 'Formation obtenue' : 'Demande';
+                    const statutBadge = f.statut === 'realisee' ? 'bg-success' : 'bg-warning';
+                    const statutText = f.statut === 'realisee' ? 'Réalisée' : 'Prévue';
+                    const dateFinValidite = f.date_fin_validite ? new Date(f.date_fin_validite).toLocaleDateString('fr-FR') : '-';
+                    html += `
+                        <tr>
+                            <td><span class="badge ${typeBadge}">${typeText}</span></td>
+                            <td>${f.nom_formation}</td>
+                            <td>${new Date(f.date_debut).toLocaleDateString('fr-FR')}</td>
+                            <td>${new Date(f.date_fin).toLocaleDateString('fr-FR')}</td>
+                            <td>${dateFinValidite}</td>
+                            <td><span class="badge ${statutBadge}">${statutText}</span></td>
+                            <td class="text-center">
+                                <button class="btn btn-sm btn-outline-info" onclick="viewFormationDocuments(${f.id}, '${f.nom_formation}')" title="Voir les documents">
+                                    <i class="fas fa-file-alt"></i> <span class="ms-1">${f.nb_documents}</span>
+                                </button>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="editFormation(${f.id}, ${personnelId})" title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteFormation(${f.id})" title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                html += '</tbody></table></div>';
+            }
+            
+            modalBody.innerHTML = html;
+            new bootstrap.Modal(document.getElementById('formationsModal')).show();
+        });
+}
+
+function toggleDateFinValidite() {
+    const typeFormation = document.getElementById('formation-type').value;
+    const container = document.getElementById('date-fin-validite-container');
+    const input = document.getElementById('formation-date-fin-validite');
+    if (typeFormation === 'formation_obtenue') {
+        container.style.display = 'block';
+        input.required = true;
+    } else {
+        container.style.display = 'none';
+        input.required = false;
+        input.value = '';
+    }
+}
+
+function showCreateFormationModal(personnelId) {
+    document.getElementById('formationModalTitle').textContent = 'Nouvelle formation';
+    document.getElementById('formation-form').reset();
+    document.getElementById('formation-id').value = '';
+    document.getElementById('formation-personnel-id').value = personnelId;
+    document.getElementById('formation-type').value = 'demande';
+    toggleDateFinValidite();
+    bootstrap.Modal.getInstance(document.getElementById('formationsModal')).hide();
+    new bootstrap.Modal(document.getElementById('formationModal')).show();
+}
+
+function editFormation(formationId, personnelId) {
+    fetch(`/api/perso/personnel/${personnelId}/formations`)
+        .then(r => r.json())
+        .then(data => {
+            const f = data.find(x => x.id === formationId);
+            if (!f) return;
+            
+            document.getElementById('formationModalTitle').textContent = 'Modifier la formation';
+            document.getElementById('formation-id').value = f.id;
+            document.getElementById('formation-personnel-id').value = personnelId;
+            document.getElementById('formation-type').value = f.type_formation || 'demande';
+            document.getElementById('formation-nom').value = f.nom_formation;
+            document.getElementById('formation-date-debut').value = f.date_debut;
+            document.getElementById('formation-date-fin').value = f.date_fin;
+            document.getElementById('formation-date-fin-validite').value = f.date_fin_validite || '';
+            document.getElementById('formation-statut').value = f.statut;
+            document.getElementById('formation-description').value = f.description || '';
+            toggleDateFinValidite();
+            
+            bootstrap.Modal.getInstance(document.getElementById('formationsModal')).hide();
+            new bootstrap.Modal(document.getElementById('formationModal')).show();
+        });
+}
+
+function saveFormation() {
+    const id = document.getElementById('formation-id').value;
+    const personnelId = document.getElementById('formation-personnel-id').value;
+    const typeFormation = document.getElementById('formation-type').value;
+    const data = {
+        nom_formation: document.getElementById('formation-nom').value,
+        type_formation: typeFormation,
+        date_debut: document.getElementById('formation-date-debut').value,
+        date_fin: document.getElementById('formation-date-fin').value,
+        date_fin_validite: typeFormation === 'formation_obtenue' ? document.getElementById('formation-date-fin-validite').value : null,
+        statut: document.getElementById('formation-statut').value,
+        description: document.getElementById('formation-description').value
+    };
+    
+    const url = id ? `/api/perso/formations/${id}` : `/api/perso/personnel/${personnelId}/formations`;
+    const method = id ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            bootstrap.Modal.getInstance(document.getElementById('formationModal')).hide();
+            const personnelNom = document.getElementById('formationsModalTitle').textContent.replace('Formations de ', '');
+            const personnelId = document.getElementById('formation-personnel-id').value;
+            viewFormations(personnelId, personnelNom);
+        }
+    });
+}
+
+function deleteFormation(formationId) {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette formation ?')) return;
+    
+    // Récupérer le personnelId depuis le modal ou depuis le contexte
+    const modalTitle = document.getElementById('formationsModalTitle').textContent;
+    const personnelNom = modalTitle.replace('Formations de ', '');
+    
+    fetch(`/api/perso/formations/${formationId}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Erreur: ' + data.error);
+            } else {
+                // Recharger la liste des formations
+                // On récupère le personnelId depuis le bouton qui a ouvert le modal
+                const buttons = Array.from(document.querySelectorAll('button[onclick*="viewFormations"]'));
+                const matchingButton = buttons.find(b => {
+                    const onclick = b.getAttribute('onclick');
+                    return onclick && onclick.includes(personnelNom.split(' ')[0]);
+                });
+                
+                if (matchingButton) {
+                    const onclick = matchingButton.getAttribute('onclick');
+                    const match = onclick.match(/viewFormations\((\d+),/);
+                    if (match) {
+                        const personnelId = parseInt(match[1]);
+                        viewFormations(personnelId, personnelNom);
+                    } else {
+                        bootstrap.Modal.getInstance(document.getElementById('formationsModal')).hide();
+                        loadPersonnel();
+                    }
+                } else {
+                    bootstrap.Modal.getInstance(document.getElementById('formationsModal')).hide();
+                    loadPersonnel();
+                }
+            }
+        });
+}
+
+function viewFormationDocuments(formationId, formationNom) {
+    fetch(`/api/perso/formations/${formationId}/documents`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('formation-document-formation-id').value = formationId;
+            document.getElementById('formationDocumentsModalTitle').textContent = `Documents - ${formationNom}`;
+            
+            let html = '';
+            if (data.length === 0) {
+                html = '<p class="text-center text-muted">Aucun document</p>';
+            } else {
+                html = '<div class="table-responsive"><table class="table table-striped">';
+                html += '<thead><tr><th>Nom du fichier</th><th>Type</th><th>Description</th><th>Date</th><th>Actions</th></tr></thead><tbody>';
+                html += data.map(d => `
+                    <tr>
+                        <td>${d.nom_fichier}</td>
+                        <td>${d.type_document || '-'}</td>
+                        <td>${d.description || '-'}</td>
+                        <td>${new Date(d.created_at).toLocaleDateString('fr-FR')}</td>
+                        <td>
+                            <a href="/api/perso/formation-documents/${d.id}/download" class="btn btn-sm btn-primary me-1">
+                                <i class="fas fa-download"></i>
+                            </a>
+                            <button class="btn btn-sm btn-danger" onclick="deleteFormationDocument(${d.id}, ${formationId})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+                html += '</tbody></table></div>';
+            }
+            
+            document.getElementById('formation-documents-list').innerHTML = html;
+            bootstrap.Modal.getInstance(document.getElementById('formationsModal')).hide();
+            new bootstrap.Modal(document.getElementById('formationDocumentsModal')).show();
+        });
+}
+
+function saveFormationDocument() {
+    const formData = new FormData();
+    formData.append('file', document.getElementById('formation-document-file').files[0]);
+    formData.append('type_document', document.getElementById('formation-document-type').value);
+    formData.append('description', document.getElementById('formation-document-description').value);
+    
+    const formationId = document.getElementById('formation-document-formation-id').value;
+    
+    fetch(`/api/perso/formations/${formationId}/documents`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            document.getElementById('formation-document-form').reset();
+            const modalTitle = document.getElementById('formationDocumentsModalTitle').textContent;
+            const formationNom = modalTitle.replace('Documents - ', '');
+            viewFormationDocuments(formationId, formationNom);
+        }
+    });
+}
+
+function deleteFormationDocument(documentId, formationId) {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) return;
+    fetch(`/api/perso/formation-documents/${documentId}`, {method: 'DELETE'})
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Erreur: ' + data.error);
+            } else {
+                const modalTitle = document.getElementById('formationDocumentsModalTitle').textContent;
+                const formationNom = modalTitle.replace('Documents - ', '');
+                viewFormationDocuments(formationId, formationNom);
+            }
+        });
+}
+
+function loadPlanningGlobal(focusPersonnelId = null, siteId = null) {
+    const monthInput = document.getElementById('planning-global-month');
+    const contentDiv = document.getElementById('planning-global-content');
+    
+    if (!monthInput || !contentDiv) {
+        console.error('Éléments du planning global non trouvés', {
+            monthInput: !!monthInput,
+            contentDiv: !!contentDiv
+        });
+        return;
+    }
+    
+    // Si la valeur du mois n'est pas définie, utiliser le mois en cours
+    if (!monthInput.value) {
+        const today = new Date();
+        monthInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    }
+    
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    
+    if (!annee || !mois || isNaN(annee) || isNaN(mois)) {
+        console.error('Date invalide:', monthInput.value);
+        contentDiv.innerHTML = '<div class="alert alert-warning p-3">Date invalide: ' + monthInput.value + '</div>';
+        return;
+    }
+    
+    console.log('Chargement du planning global:', { mois, annee, siteId });
+    contentDiv.innerHTML = '<div class="text-center p-3"><div class="spinner-border" role="status"><span class="visually-hidden">Chargement...</span></div></div>';
+    
+    let url = `/api/perso/planning-global?mois=${mois}&annee=${annee}`;
+    if (siteId) {
+        url += `&site_id=${siteId}`;
+    }
+    
+    console.log('URL de l\'API:', url);
+    
+    // Timeout pour éviter que le spinner tourne indéfiniment
+    const timeoutId = setTimeout(() => {
+        console.error('Timeout lors du chargement du planning global');
+        if (contentDiv.innerHTML.includes('spinner-border')) {
+            contentDiv.innerHTML = '<div class="alert alert-warning p-3">Le chargement prend trop de temps. Veuillez rafraîchir la page.</div>';
+        }
+    }, 30000); // 30 secondes
+    
+    fetch(url)
+        .then(r => {
+            clearTimeout(timeoutId);
+            console.log('Réponse API:', r.status, r.statusText);
+            if (!r.ok) {
+                if (r.status === 403) {
+                    throw new Error('Accès refusé. Vérifiez vos droits d\'accès à la page Perso.');
+                }
+                return r.text().then(text => {
+                    console.error('Erreur API:', text);
+                    let errorMsg = `Erreur HTTP: ${r.status}`;
+                    try {
+                        const errorData = JSON.parse(text);
+                        if (errorData.error) {
+                            errorMsg = errorData.error;
+                        }
+                    } catch (e) {
+                        errorMsg += ' - ' + text.substring(0, 100);
+                    }
+                    throw new Error(errorMsg);
+                });
+            }
+            return r.json();
+        })
+        .then(data => {
+            clearTimeout(timeoutId);
+            console.log('Données reçues:', data);
+            if (data && data.error) {
+                contentDiv.innerHTML = '<div class="alert alert-danger p-3">' + data.error + '</div>';
+                return;
+            }
+            if (!Array.isArray(data)) {
+                console.error('Format de données invalide, reçu:', typeof data, data);
+                contentDiv.innerHTML = '<div class="alert alert-warning p-3">Format de données invalide. Type: ' + typeof data + '</div>';
+                return;
+            }
+            if (data.length === 0) {
+                console.log('Aucun personnel trouvé');
+                contentDiv.innerHTML = '<div class="alert alert-info p-3">Aucun personnel trouvé. Créez d\'abord des membres du personnel.</div>';
+                return;
+            }
+            console.log('Rendu du planning avec', data.length, 'personnels');
+            renderPlanningGlobal(data, mois, annee, focusPersonnelId);
+        })
+        .catch(error => {
+            clearTimeout(timeoutId);
+            console.error('Erreur lors du chargement du planning global:', error);
+            contentDiv.innerHTML = '<div class="alert alert-danger p-3">Erreur lors du chargement du planning: ' + (error.message || error) + '</div>';
+        });
+}
+
+function renderPlanningGlobal(data, mois, annee, focusPersonnelId = null) {
+    const contentDiv = document.getElementById('planning-global-content');
+    if (!contentDiv) {
+        console.error('Élément planning-global-content non trouvé');
+        return;
+    }
+    
+    const moisNoms = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const jourNoms = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    
+    if (!data || data.length === 0) {
+        contentDiv.innerHTML = '<div class="alert alert-info p-3">Aucun personnel trouvé. Créez d\'abord des membres du personnel.</div>';
+        return;
+    }
+    
+    // Calculer le nombre de jours dans le mois
+    const premierJour = new Date(annee, mois - 1, 1);
+    const dernierJour = new Date(annee, mois, 0);
+    const nbJours = dernierJour.getDate();
+    
+    // Largeur fixe réduite pour les cellules de jours - réduite d'1/3
+    const dayCellWidthPx = 10; // Largeur fixe de 10px
+    
+    let html = `<div class="p-1"><h6 class="mb-0" style="font-size: 0.85rem;">${moisNoms[mois - 1]} ${annee}</h6></div>`;
+    html += '<div style="width: 100%; overflow-x: hidden;"><table class="table table-bordered table-sm mb-0" style="width: 100%; font-size: 0.55rem; border-collapse: collapse; table-layout: fixed;">';
+    html += '<thead class="sticky-top bg-light"><tr><th style="width: 70px; min-width: 70px; max-width: 70px; position: sticky; left: 0; background: #f8f9fa; z-index: 10; padding: 0.1rem 0.2rem !important; font-size: 0.6rem;">Personnel</th>';
+    
+    // En-têtes des jours
+    for (let jour = 1; jour <= nbJours; jour++) {
+        const date = new Date(annee, mois - 1, jour);
+        const jourSemaine = jourNoms[date.getDay() === 0 ? 6 : date.getDay() - 1];
+        html += `<th class="text-center" style="width: 10px !important; min-width: 10px !important; max-width: 10px !important; padding: 0.05rem 0.08rem !important; font-size: 0.5rem;">${jour}<br><small style="font-size: 0.4rem;">${jourSemaine}</small></th>`;
+    }
+    html += '</tr></thead><tbody>';
+    
+    // Pour chaque personnel
+    data.forEach(personnel => {
+        if (!personnel || !personnel.planning) {
+            return;
+        }
+        
+        const rowClass = focusPersonnelId && personnel.personnel_id === focusPersonnelId ? 'table-warning' : '';
+        html += `<tr class="${rowClass}"><td style="position: sticky; left: 0; background: white; z-index: 5; padding: 0.1rem 0.2rem !important; width: 70px; min-width: 70px; max-width: 70px;"><strong style="font-size: 0.6rem; word-break: break-word; line-height: 1.1; display: block;">${personnel.personnel_nom || 'Inconnu'}</strong></td>`;
+        
+        // Pour chaque jour du mois
+        for (let jour = 1; jour <= nbJours; jour++) {
+            const dateStr = `${annee}-${String(mois).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+            const jourData = personnel.planning.find(p => p && p.date === dateStr);
+            
+            let cellClass = '';
+            let cellContent = '';
+            
+            if (jourData) {
+                if (jourData.formation) {
+                    cellClass = jourData.formation.statut === 'realisee' ? 'bg-success text-white' : 'bg-warning text-dark';
+                    cellContent = 'F';
+                } else if (jourData.conge) {
+                    // Orange pour en attente, vert pour accepté
+                    cellClass = jourData.conge.statut === 'accepte' ? 'bg-success text-white' : 'bg-warning text-dark';
+                    cellContent = 'C';
+                } else if (jourData.absence) {
+                    if (jourData.absence.type === 'justifiee') {
+                        cellClass = 'bg-info text-white';
+                        cellContent = 'AJ';
+                    } else if (jourData.absence.type === 'injustifiee') {
+                        cellClass = 'bg-danger text-white';
+                        cellContent = 'AI';
+                    } else {
+                        cellClass = 'bg-warning';
+                        cellContent = 'F';
+                    }
+                } else if (jourData.type_journee) {
+                    const abbrev = {
+                        'matin': 'M',
+                        'apres_midi': 'AM',
+                        'journee': 'J',
+                        'nuit': 'N'
+                    };
+                    const colors = {
+                        'matin': 'bg-primary text-white',
+                        'apres_midi': 'bg-secondary text-white',
+                        'journee': 'bg-dark text-white',
+                        'nuit': 'bg-dark text-white'
+                    };
+                    cellClass = colors[jourData.type_journee] || '';
+                    cellContent = abbrev[jourData.type_journee] || '';
+                }
+            }
+            
+            html += `<td class="text-center ${cellClass}" style="font-size: 0.5rem; padding: 0.05rem 0.08rem !important; width: 10px !important; min-width: 10px !important; max-width: 10px !important;">${cellContent}</td>`;
+        }
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table></div>';
+    html += '<div class="p-1"><small style="font-size: 0.55rem;"><strong>Légende:</strong> M=Matin, AM=Après-midi, J=Journée, N=Nuit, C=Congé, AJ=Absence justifiée, AI=Absence injustifiée, F=Formation</small></div>';
+    
+    contentDiv.innerHTML = html;
+}
+
+function previousMonthGlobal() {
+    const monthInput = document.getElementById('planning-global-month');
+    const select = document.getElementById('planning-global-equipe-select');
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    const newDate = new Date(annee, mois - 2, 1);
+    monthInput.value = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`;
+    const siteId = select && select.value ? select.value : null;
+    loadPlanningGlobal(null, siteId);
+}
+
+function nextMonthGlobal() {
+    const monthInput = document.getElementById('planning-global-month');
+    const select = document.getElementById('planning-global-equipe-select');
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    const newDate = new Date(annee, mois, 1);
+    monthInput.value = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`;
+    const siteId = select && select.value ? select.value : null;
+    loadPlanningGlobal(null, siteId);
+}
+
+function filterByEquipe() {
+    const select = document.getElementById('planning-global-equipe-select');
+    const siteId = select ? select.value : null;
+    loadPlanningGlobal(null, siteId || null);
+}
+
+function initPlanningGlobal() {
+    const today = new Date();
+    const monthInput = document.getElementById('planning-global-month');
+    const contentDiv = document.getElementById('planning-global-content');
+    
+    if (!monthInput || !contentDiv) {
+        console.error('Éléments du planning global non trouvés', {
+            monthInput: !!monthInput,
+            contentDiv: !!contentDiv
+        });
+        return;
+    }
+    
+    // Initialiser la valeur du mois si elle n'est pas déjà définie
+    if (!monthInput.value) {
+        monthInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    }
+    
+    console.log('Initialisation du planning global, mois:', monthInput.value);
+    
+    // Charger immédiatement le planning global du mois courant
+    loadPlanningGlobal();
+}
+
+{% else %}
+// Personnel functions - Planning mensuel
+function initPlanningPersonnel() {
+    const today = new Date();
+    const monthInput = document.getElementById('planning-personnel-month');
+    const contentDiv = document.getElementById('planning-personnel-content');
+    
+    if (!monthInput || !contentDiv) {
+        console.error('Éléments du planning personnel non trouvés');
+        return;
+    }
+    
+    if (!monthInput.value) {
+        monthInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    }
+}
+
+function loadPlanningPersonnel(focusPersonnelId = null, siteId = null) {
+    const monthInput = document.getElementById('planning-personnel-month');
+    const contentDiv = document.getElementById('planning-personnel-content');
+    
+    if (!monthInput || !contentDiv) {
+        return;
+    }
+    
+    if (!monthInput.value) {
+        const today = new Date();
+        monthInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    }
+    
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    
+    if (!annee || !mois || isNaN(annee) || isNaN(mois)) {
+        contentDiv.innerHTML = '<div class="alert alert-warning p-3">Date invalide</div>';
+        return;
+    }
+    
+    contentDiv.innerHTML = '<div class="text-center p-3"><div class="spinner-border" role="status"><span class="visually-hidden">Chargement...</span></div></div>';
+    
+    let url = `/api/perso/planning-global?mois=${mois}&annee=${annee}`;
+    if (siteId) {
+        url += `&site_id=${siteId}`;
+    }
+    
+    const timeoutId = setTimeout(() => {
+        if (contentDiv.innerHTML.includes('spinner-border')) {
+            contentDiv.innerHTML = '<div class="alert alert-warning p-3">Le chargement prend trop de temps.</div>';
+        }
+    }, 30000);
+    
+    fetch(url)
+        .then(r => {
+            clearTimeout(timeoutId);
+            if (!r.ok) {
+                if (r.status === 403) {
+                    throw new Error('Accès refusé.');
+                }
+                return r.text().then(text => {
+                    let errorMsg = `Erreur HTTP: ${r.status}`;
+                    try {
+                        const errorData = JSON.parse(text);
+                        if (errorData.error) {
+                            errorMsg = errorData.error;
+                        }
+                    } catch (e) {
+                        errorMsg += ' - ' + text.substring(0, 100);
+                    }
+                    throw new Error(errorMsg);
+                });
+            }
+            return r.json();
+        })
+        .then(data => {
+            clearTimeout(timeoutId);
+            if (data && data.error) {
+                contentDiv.innerHTML = '<div class="alert alert-danger p-3">' + data.error + '</div>';
+                return;
+            }
+            if (!Array.isArray(data)) {
+                contentDiv.innerHTML = '<div class="alert alert-warning p-3">Format de données invalide.</div>';
+                return;
+            }
+            if (data.length === 0) {
+                contentDiv.innerHTML = '<div class="alert alert-info p-3">Aucun personnel trouvé.</div>';
+                return;
+            }
+            renderPlanningPersonnel(data, mois, annee, focusPersonnelId);
+        })
+        .catch(error => {
+            clearTimeout(timeoutId);
+            contentDiv.innerHTML = '<div class="alert alert-danger p-3">Erreur: ' + (error.message || error) + '</div>';
+        });
+}
+
+function renderPlanningPersonnel(data, mois, annee, focusPersonnelId = null) {
+    const contentDiv = document.getElementById('planning-personnel-content');
+    if (!contentDiv) return;
+    
+    const moisNoms = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const jourNoms = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    
+    if (!data || data.length === 0) {
+        contentDiv.innerHTML = '<div class="alert alert-info p-3">Aucun personnel trouvé.</div>';
+        return;
+    }
+    
+    const dernierJour = new Date(annee, mois, 0);
+    const nbJours = dernierJour.getDate();
+    
+    let html = `<div class="p-1"><h6 class="mb-0" style="font-size: 0.85rem;">${moisNoms[mois - 1]} ${annee}</h6></div>`;
+    html += '<div style="width: 100%; overflow-x: hidden;"><table class="table table-bordered table-sm mb-0" style="width: 100%; font-size: 0.55rem; border-collapse: collapse; table-layout: fixed;">';
+    html += '<thead class="sticky-top bg-light"><tr><th style="width: 70px; min-width: 70px; max-width: 70px; position: sticky; left: 0; background: #f8f9fa; z-index: 10; padding: 0.1rem 0.2rem !important; font-size: 0.6rem;">Personnel</th>';
+    
+    for (let jour = 1; jour <= nbJours; jour++) {
+        const date = new Date(annee, mois - 1, jour);
+        const jourSemaine = jourNoms[date.getDay() === 0 ? 6 : date.getDay() - 1];
+        html += `<th class="text-center" style="width: 10px !important; min-width: 10px !important; max-width: 10px !important; padding: 0.05rem 0.08rem !important; font-size: 0.5rem;">${jour}<br><small style="font-size: 0.4rem;">${jourSemaine}</small></th>`;
+    }
+    html += '</tr></thead><tbody>';
+    
+    data.forEach(personnel => {
+        if (!personnel || !personnel.planning) return;
+        
+        const rowClass = focusPersonnelId && personnel.personnel_id === focusPersonnelId ? 'table-warning' : '';
+        html += `<tr class="${rowClass}"><td style="position: sticky; left: 0; background: white; z-index: 5; padding: 0.1rem 0.2rem !important; width: 70px; min-width: 70px; max-width: 70px;"><strong style="font-size: 0.6rem; word-break: break-word; line-height: 1.1; display: block;">${personnel.personnel_nom || 'Inconnu'}</strong></td>`;
+        
+        for (let jour = 1; jour <= nbJours; jour++) {
+            const dateStr = `${annee}-${String(mois).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+            const jourData = personnel.planning.find(p => p && p.date === dateStr);
+            
+            let cellClass = '';
+            let cellContent = '';
+            
+            if (jourData) {
+                if (jourData.formation) {
+                    cellClass = jourData.formation.statut === 'realisee' ? 'bg-success text-white' : 'bg-warning text-dark';
+                    cellContent = 'F';
+                } else if (jourData.conge) {
+                    cellClass = jourData.conge.statut === 'accepte' ? 'bg-success text-white' : 'bg-warning text-dark';
+                    cellContent = 'C';
+                } else if (jourData.absence) {
+                    if (jourData.absence.type === 'justifiee') {
+                        cellClass = 'bg-info text-white';
+                        cellContent = 'AJ';
+                    } else if (jourData.absence.type === 'injustifiee') {
+                        cellClass = 'bg-danger text-white';
+                        cellContent = 'AI';
+                    } else {
+                        cellClass = 'bg-warning';
+                        cellContent = 'F';
+                    }
+                } else if (jourData.type_journee) {
+                    const abbrev = {'matin': 'M', 'apres_midi': 'AM', 'journee': 'J', 'nuit': 'N'};
+                    const colors = {'matin': 'bg-primary text-white', 'apres_midi': 'bg-secondary text-white', 'journee': 'bg-dark text-white', 'nuit': 'bg-dark text-white'};
+                    cellClass = colors[jourData.type_journee] || '';
+                    cellContent = abbrev[jourData.type_journee] || '';
+                }
+            }
+            
+            html += `<td class="text-center ${cellClass}" style="font-size: 0.5rem; padding: 0.05rem 0.08rem !important; width: 10px !important; min-width: 10px !important; max-width: 10px !important;">${cellContent}</td>`;
+        }
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table></div>';
+    html += '<div class="p-1"><small style="font-size: 0.55rem;"><strong>Légende:</strong> M=Matin, AM=Après-midi, J=Journée, N=Nuit, C=Congé, AJ=Absence justifiée, AI=Absence injustifiée, F=Formation</small></div>';
+    
+    contentDiv.innerHTML = html;
+}
+
+function previousMonthPersonnel() {
+    const monthInput = document.getElementById('planning-personnel-month');
+    const select = document.getElementById('planning-personnel-equipe-select');
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    const newDate = new Date(annee, mois - 2, 1);
+    monthInput.value = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`;
+    const siteId = select && select.value ? select.value : null;
+    loadPlanningPersonnel(null, siteId);
+}
+
+function nextMonthPersonnel() {
+    const monthInput = document.getElementById('planning-personnel-month');
+    const select = document.getElementById('planning-personnel-equipe-select');
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    const newDate = new Date(annee, mois, 1);
+    monthInput.value = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`;
+    const siteId = select && select.value ? select.value : null;
+    loadPlanningPersonnel(null, siteId);
+}
+
+function filterByEquipePersonnel() {
+    const select = document.getElementById('planning-personnel-equipe-select');
+    const siteId = select ? select.value : null;
+    loadPlanningPersonnel(null, siteId || null);
+}
+
+function loadMonProfil() {
+    return fetch('/api/perso/personnel')
+        .then(r => r.json())
+        .then(data => {
+            if (data.length === 0) {
+                console.warn('Aucun profil trouvé');
+                return;
+            }
+            const p = data[0];
+            currentPersonnelId = p.id;
+            currentPersonnelUserId = p.user_id;
+            
+            // Afficher le récapitulatif
+            afficherRecapitulatif(p);
+            
+            // Charger les documents une fois que currentPersonnelId est défini
+            loadMesDocuments();
+        })
+        .catch(error => {
+            console.error('Erreur lors du chargement du profil:', error);
+        });
+}
+
+function afficherRecapitulatif(p) {
+    const contentDiv = document.getElementById('mon-recap-content');
+    if (!contentDiv) return;
+    
+    // Déterminer le nom du site
+    const siteNom = p.site_id === 1 ? 'SMP' : p.site_id === 2 ? 'LPZ' : 'Non défini';
+    
+    // Formater la date d'embauche
+    const dateEmbauche = p.date_embauche ? new Date(p.date_embauche).toLocaleDateString('fr-FR') : 'Non renseignée';
+    
+    const html = `
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header bg-primary text-white">
+                        <h6 class="mb-0"><i class="fas fa-id-card me-2"></i>Informations personnelles</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless mb-0">
+                            <tr>
+                                <td class="fw-bold" style="width: 40%;">Nom :</td>
+                                <td>${p.nom || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Prénom :</td>
+                                <td>${p.prenom || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Email :</td>
+                                <td>${p.email || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Téléphone :</td>
+                                <td>${p.telephone || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Date d'embauche :</td>
+                                <td>${dateEmbauche}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card mb-3">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0"><i class="fas fa-briefcase me-2"></i>Informations professionnelles</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-borderless mb-0">
+                            <tr>
+                                <td class="fw-bold" style="width: 40%;">Poste :</td>
+                                <td>${p.poste || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Société :</td>
+                                <td>${p.societe || '-'}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Site :</td>
+                                <td>${siteNom}</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Nom d'utilisateur :</td>
+                                <td>${p.username || '-'}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    contentDiv.innerHTML = html;
+}
+
+function loadMesConges() {
+    fetch('/api/perso/conges')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('mes-conges-tbody');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucun congé</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(d => `
+                <tr>
+                    <td>${d.date_debut}</td>
+                    <td>${d.date_fin}</td>
+                    <td>${d.type_conge}</td>
+                    <td>
+                        <span class="badge bg-${d.statut === 'accepte' ? 'success' : d.statut === 'refuse' ? 'danger' : 'warning'}">
+                            ${d.statut}
+                        </span>
+                    </td>
+                    <td>${d.commentaire || '-'}</td>
+                </tr>
+            `).join('');
+        });
+}
+
+function showCreateCongeModal() {
+    document.getElementById('conge-form').reset();
+    new bootstrap.Modal(document.getElementById('congeModal')).show();
+}
+
+function saveConge() {
+    const data = {
+        date_debut: document.getElementById('conge-date-debut').value,
+        date_fin: document.getElementById('conge-date-fin').value,
+        type_conge: document.getElementById('conge-type').value,
+        commentaire: document.getElementById('conge-commentaire').value
+    };
+    
+    fetch('/api/perso/conges', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            bootstrap.Modal.getInstance(document.getElementById('congeModal')).hide();
+            loadMesConges();
+        }
+    });
+}
+
+function loadMesDocuments() {
+    if (!currentPersonnelId) {
+        console.warn('currentPersonnelId non défini, impossible de charger les documents');
+        const tbody = document.getElementById('mes-documents-tbody');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-warning">Chargement du profil en cours...</td></tr>';
+        }
+        return;
+    }
+    const tbody = document.getElementById('mes-documents-tbody');
+    if (!tbody) {
+        console.error('Élément mes-documents-tbody non trouvé');
+        return;
+    }
+    
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Chargement...</td></tr>';
+    
+    fetch(`/api/perso/personnel/${currentPersonnelId}/documents`)
+        .then(r => {
+            if (!r.ok) {
+                throw new Error(`Erreur HTTP: ${r.status}`);
+            }
+            return r.json();
+        })
+        .then(data => {
+            if (data.error) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">${data.error}</td></tr>`;
+                return;
+            }
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucun document</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(d => `
+                <tr>
+                    <td>${d.nom_fichier}</td>
+                    <td>${d.type_document || '-'}</td>
+                    <td>${d.description || '-'}</td>
+                    <td>${new Date(d.created_at).toLocaleDateString('fr-FR')}</td>
+                    <td>
+                        <a href="/api/perso/documents/${d.id}/download" class="btn btn-sm btn-primary">
+                            <i class="fas fa-download"></i> Télécharger
+                        </a>
+                    </td>
+                </tr>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Erreur lors du chargement des documents:', error);
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Erreur lors du chargement: ${error.message}</td></tr>`;
+        });
+}
+
+function initPlanning() {
+    const today = new Date();
+    const monthInput = document.getElementById('planning-month');
+    monthInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    loadPlanning();
+}
+
+function loadPlanning() {
+    if (!currentPersonnelId) return;
+    const monthInput = document.getElementById('planning-month');
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    
+    fetch(`/api/perso/planning/${currentPersonnelId}?mois=${mois}&annee=${annee}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('planning-content').innerHTML = '<div class="alert alert-danger">' + data.error + '</div>';
+                return;
+            }
+            renderPlanning(data, mois, annee);
+        });
+}
+
+function renderPlanning(planning, mois, annee) {
+    const moisNoms = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const jourNoms = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+    
+    let html = `<h5>${moisNoms[mois - 1]} ${annee}</h5>`;
+    html += '<div class="table-responsive"><table class="table table-bordered">';
+    html += '<thead><tr><th>' + jourNoms.join('</th><th>') + '</th></tr></thead><tbody>';
+    
+    // Grouper par semaine
+    let semaine = [];
+    planning.forEach((jour, index) => {
+        const date = new Date(jour.date);
+        const jourSemaine = date.getDay() === 0 ? 6 : date.getDay() - 1; // Convertir dimanche=0 en dimanche=6
+        
+        // Ajuster pour commencer le tableau à lundi
+        while (semaine.length < jourSemaine) {
+            semaine.push(null);
+        }
+        
+        let cellClass = '';
+        let cellContent = date.getDate();
+        
+        if (jour.formation) {
+            cellClass = jour.formation.statut === 'realisee' ? 'bg-success text-white' : 'bg-warning text-dark';
+            cellContent += ` (Formation: ${jour.formation.nom})`;
+        } else if (jour.conge) {
+            // Orange pour en attente, vert pour accepté
+            cellClass = jour.conge.statut === 'accepte' ? 'bg-success text-white' : 'bg-warning text-dark';
+            cellContent += ' (Congé)';
+        } else if (jour.absence) {
+            cellClass = jour.absence.type === 'justifiee' ? 'bg-info text-white' : 
+                       jour.absence.type === 'injustifiee' ? 'bg-danger text-white' : 'bg-warning';
+            cellContent += ` (${jour.absence.type})`;
+        } else if (jour.type_journee) {
+            const colors = {
+                'matin': 'bg-primary text-white',
+                'apres_midi': 'bg-secondary text-white',
+                'journee': 'bg-dark text-white',
+                'nuit': 'bg-dark text-white'
+            };
+            cellClass = colors[jour.type_journee] || '';
+            cellContent += ` (${jour.type_journee})`;
+        }
+        
+        semaine.push({content: cellContent, class: cellClass});
+        
+        if (jourSemaine === 6 || index === planning.length - 1) {
+            html += '<tr>';
+            for (let i = 0; i < 7; i++) {
+                const cell = semaine[i] || {content: '', class: ''};
+                html += `<td class="${cell.class}">${cell.content}</td>`;
+            }
+            html += '</tr>';
+            semaine = [];
+        }
+    });
+    
+    html += '</tbody></table></div>';
+    document.getElementById('planning-content').innerHTML = html;
+}
+
+function previousMonth() {
+    const monthInput = document.getElementById('planning-month');
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    const newDate = new Date(annee, mois - 2, 1);
+    monthInput.value = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`;
+    loadPlanning();
+}
+
+function nextMonth() {
+    const monthInput = document.getElementById('planning-month');
+    const [annee, mois] = monthInput.value.split('-').map(Number);
+    const newDate = new Date(annee, mois, 1);
+    monthInput.value = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, '0')}`;
+    loadPlanning();
+}
+
+{% endif %}
+</script>
+{% endblock %}

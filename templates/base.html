@@ -23,70 +23,91 @@
         body {
             background: var(--flot-bg);
         }
-        /* Sidebar PC/tablette */
-        .sidebar {
-            min-height: 100vh;
+        /* Bandeau horizontal PC/tablette */
+        .top-navbar {
             background: var(--flot-blue-dark);
             position: fixed;
             top: 0;
             left: 0;
-            height: 100vh;
-            width: 280px;
+            right: 0;
+            width: 100%;
+            height: auto;
+            min-height: 70px;
             z-index: 1000;
-            overflow-y: auto;
-            overflow-x: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        .sidebar .nav-link {
+        .top-navbar .navbar-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .top-navbar .nav {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            flex-wrap: wrap; /* Autorise le retour à la ligne, pas de barre de défilement */
+            gap: 0.5rem;
+        }
+        .top-navbar .nav-link {
             color: rgba(255,255,255,0.85);
-            padding: 0.75rem 1.25rem;
+            padding: 0.5rem 1rem;
             border-radius: 0.5rem;
-            margin: 0.25rem 0.5rem;
             transition: all 0.3s ease;
             white-space: nowrap;
+            font-size: 0.95rem;
         }
-        .sidebar .nav-link:hover,
-        .sidebar .nav-link.active {
+        .top-navbar .nav-link:hover,
+        .top-navbar .nav-link.active {
             color: var(--flot-blue-dark);
             background-color: var(--flot-white);
             font-weight: bold;
-            transform: translateX(5px);
+            transform: translateY(-2px);
         }
         
         /* Style spécial pour le bouton déconnexion */
-        .sidebar .nav-link.logout-link {
+        .top-navbar .nav-link.logout-link {
             color: #dc3545 !important;
-            margin-top: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid rgba(255,255,255,0.3) !important;
+            margin-left: 0.5rem;
+            padding-left: 1rem;
+            border-left: 1px solid rgba(255,255,255,0.3) !important;
             background: transparent !important;
-            border-radius: 0 !important;
         }
-        .sidebar .nav-link.logout-link:hover {
+        .top-navbar .nav-link.logout-link:hover {
             color: white !important;
             background: #dc3545 !important;
-            transform: translateX(5px);
-            border-radius: 0 !important;
-            border-top: 1px solid rgba(255,255,255,0.3) !important;
+            transform: translateY(-2px);
+            border-left: 1px solid rgba(255,255,255,0.3) !important;
         }
-        .sidebar .nav-link.logout-link:focus {
+        .top-navbar .nav-link.logout-link:focus {
             background: transparent !important;
-            border-radius: 0 !important;
-            border-top: 1px solid rgba(255,255,255,0.3) !important;
+            border-left: 1px solid rgba(255,255,255,0.3) !important;
         }
-        .sidebar .nav-link.logout-link i {
+        .top-navbar .nav-link.logout-link i {
             color: #dc3545 !important;
         }
-        .sidebar .nav-link.logout-link:hover i {
+        .top-navbar .nav-link.logout-link:hover i {
             color: white !important;
+        }
+        /* Dropdown dans le bandeau */
+        .top-navbar .dropdown-menu {
+            min-width: 180px;
+        }
+        .top-navbar .dropdown-item.active {
+            font-weight: 600;
         }
         .main-content {
             background-color: var(--flot-bg);
             min-height: 100vh;
-            margin-left: 280px;
+            margin-top: 70px;
+            margin-left: auto;
             margin-right: auto;
             max-width: 1200px;
             padding-left: 24px;
             padding-right: 24px;
+            padding-top: 24px;
         }
         .card {
             border: none;
@@ -123,44 +144,48 @@
             border-radius: 10px;
             border: none;
         }
-        .sidebar-logo {
+        .top-navbar-logo {
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 2rem;
             gap: 0.7rem;
         }
-        .sidebar-logo img {
-            height: 38px;
-            width: 38px;
+        .top-navbar-logo img {
+            height: 40px;
+            width: 40px;
             object-fit: contain;
         }
         .logo-bandeau {
             background: var(--flot-white);
             border-radius: 50%;
-            width: 120px;
-            height: 120px;
-            margin: 24px auto 32px auto;
+            width: 50px;
+            height: 50px;
             box-shadow: 0 2px 8px rgba(32,70,107,0.04);
             display: flex;
             justify-content: center;
             align-items: center;
+            padding: 8px;
         }
         .logo-bandeau img {
-            max-width: 90%;
-            max-height: 90%;
+            max-width: 100%;
+            max-height: 100%;
             width: auto;
             height: auto;
             display: block;
-            margin: 0 auto;
         }
-        /* Responsive : masquer la sidebar et adapter le contenu sur mobile */
+        .logo-text {
+            color: var(--flot-white);
+            font-weight: 700;
+            font-size: 1.3rem;
+            letter-spacing: 0.03em;
+        }
+        /* Responsive : adapter le bandeau et le contenu sur mobile */
         @media (max-width: 991.98px) {
-            .sidebar {
+            .top-navbar {
                 display: none !important;
             }
             .main-content {
-                margin-left: 0;
+                margin-top: 0;
                 padding: 16px 2px 16px 2px;
             }
         }
@@ -228,21 +253,6 @@
             filter: brightness(0) invert(1); /* logo blanc */
         }
         
-        /* Scrollbar personnalisée pour la sidebar */
-        .sidebar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .sidebar::-webkit-scrollbar-track {
-            background: rgba(255,255,255,0.1);
-            border-radius: 3px;
-        }
-        .sidebar::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.3);
-            border-radius: 3px;
-        }
-        .sidebar::-webkit-scrollbar-thumb:hover {
-            background: rgba(255,255,255,0.5);
-        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -253,8 +263,9 @@
       <div class="container-fluid">
         <a class="navbar-brand d-flex align-items-center" href="{{ url_for('index') }}">
           <span style="background: #fff; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(32,70,107,0.08);">
-            <img src="{{ url_for('static', filename='logo_flot.png') }}" alt="Logo Flot" style="width: 32px; height: 32px; object-fit: contain;">
+            <img src="{{ url_for('static', filename='favicon.png') }}" alt="Flot" style="width: 26px; height: 26px; object-fit: contain;">
           </span>
+          <span class="ms-2 fw-bold" style="letter-spacing:0.03em;">Flot</span>
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
           <span class="navbar-toggler-icon"></span>
@@ -265,68 +276,104 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Fermer"></button>
           </div>
           <div class="offcanvas-body">
-            <div class="offcanvas-logo" style="background: #fff; border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem auto;">
-              <img src="{{ url_for('static', filename='logo_flot.png') }}" alt="Logo Flot" style="width: 38px; height: 38px; object-fit: contain;">
+            <div class="offcanvas-logo d-flex align-items-center justify-content-center" style="margin: 0 auto 1.5rem auto;">
+              <span style="background: #fff; border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;">
+                <img src="{{ url_for('static', filename='favicon.png') }}" alt="Flot" style="width: 34px; height: 34px; object-fit: contain;">
+              </span>
+              <span class="fw-bold" style="font-size:1.4rem; letter-spacing:0.03em;">Flot</span>
             </div>
             <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
               {% set user = current_user %}
               {% if user.is_authenticated and user.role == 'admin' %}
                   <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>
-                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés SMP</a></li>
-                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés LPZ</a></li>
-                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>
-                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>
-                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releves' %}active{% endif %}" href="{{ url_for('releves') }}"><i class="fas fa-clipboard-list me-2"></i>Relevés</a></li>
                   <li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'valeurs' %}active{% endif %}" href="{{ url_for('valeurs') }}"><i class="fas fa-chart-line me-2"></i>Valeurs</a></li>
                   <li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>
-                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-users-cog me-2"></i>Utilisateurs</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'perso' %}active{% endif %}" href="{{ url_for('perso') }}"><i class="fas fa-user-tie me-2"></i>Perso</a></li>
+                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-cog me-2"></i>Paramètres</a></li>
               {% else %}
                   {% set accesses = user.page_accesses|selectattr('can_access')|map(attribute='page_name')|list %}
                   {% if 'index' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>{% endif %}
-                  {% if 'releve_site_smp' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés SMP</a></li>{% endif %}
-                  {% if 'releve_site_lpz' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés LPZ</a></li>{% endif %}
-                  {% if 'historique' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>{% endif %}
-                  {% if 'indicateurs' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>{% endif %}
-                  {% if 'releve_20' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>{% endif %}
+                  {% if 'releve_site_smp' in accesses or 'releve_site_lpz' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releves' %}active{% endif %}" href="{{ url_for('releves') }}"><i class="fas fa-clipboard-list me-2"></i>Relevés</a></li>{% endif %}
                   {% if 'routines' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>{% endif %}
+                  {% if 'historique' in accesses or 'indicateurs' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'valeurs' %}active{% endif %}" href="{{ url_for('valeurs') }}"><i class="fas fa-chart-line me-2"></i>Valeurs</a></li>{% endif %}
                   {% if 'code_magasin' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>{% endif %}
+                  {% if 'perso' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'perso' %}active{% endif %}" href="{{ url_for('perso') }}"><i class="fas fa-user-tie me-2"></i>Perso</a></li>{% endif %}
               {% endif %}
-              <li class="nav-item"><a class="nav-link logout-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
+              <li class="nav-item"><a class="nav-link logout-link" href="{{ url_for('logout') }}" title="Déconnexion"><i class="fas fa-sign-out-alt"></i></a></li>
             </ul>
           </div>
         </div>
       </div>
     </nav>
-    <!-- Sidebar PC/tablette (affichée uniquement à partir de lg) -->
-    <nav class="col-lg-2 d-none d-lg-block sidebar">
-        <div class="position-sticky pt-3">
-            <div class="sidebar-logo logo-bandeau">
-                <img src="{{ url_for('static', filename='logo_flot.png') }}" alt="Logo Flot">
+    <!-- Bandeau horizontal PC/tablette (affiché uniquement à partir de lg) -->
+    <nav class="d-none d-lg-block top-navbar">
+        <div class="navbar-container">
+            <div class="top-navbar-logo">
+                <div class="logo-bandeau">
+                    <img src="{{ url_for('static', filename='favicon.png') }}" alt="Flot">
+                </div>
+                <span class="logo-text">Flot</span>
             </div>
-            <ul class="nav flex-column">
+            <ul class="nav">
                 {% set user = current_user %}
                 {% if user.is_authenticated and user.role == 'admin' %}
                     <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés SMP</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés LPZ</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>
-                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>
-                                      <li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>
-                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>
-                  <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-users-cog me-2"></i>Utilisateurs</a></li>
+                    <!-- Relevés (sous-onglets SMP / LPZ) -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint == 'releve_site' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-clipboard-list me-2"></i>Relevés
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}">SMP</a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}">LPZ</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>
+                    <!-- Valeurs (sous-onglets Historique / Indicateurs) -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint in ['historique', 'indicateurs'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-chart-line me-2"></i>Valeurs
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark">
+                            <li><a class="dropdown-item {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}">Historique</a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}">Indicateurs</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'perso' %}active{% endif %}" href="{{ url_for('perso') }}"><i class="fas fa-user-tie me-2"></i>Perso</a></li>
+                    <li class="nav-item"><a class="nav-link {% if request.endpoint == 'utilisateurs' %}active{% endif %}" href="{{ url_for('utilisateurs') }}"><i class="fas fa-cog me-2"></i>Paramètres</a></li>
                 {% else %}
                     {% set accesses = user.page_accesses|selectattr('can_access')|map(attribute='page_name')|list %}
                     {% if 'index' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="{{ url_for('index') }}"><i class="fas fa-home me-2"></i>Accueil</a></li>{% endif %}
-                    {% if 'releve_site_smp' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés SMP</a></li>{% endif %}
-                    {% if 'releve_site_lpz' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}"><i class="fas fa-clipboard-list me-2"></i>Relevés LPZ</a></li>{% endif %}
-                    {% if 'historique' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}"><i class="fas fa-history me-2"></i>Historique</a></li>{% endif %}
-                    {% if 'indicateurs' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}"><i class="fas fa-chart-line me-2"></i>Indicateurs</a></li>{% endif %}
-                    {% if 'releve_20' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'releve_20' %}active{% endif %}" href="{{ url_for('releve_20') }}"><i class="fas fa-camera me-2"></i>Relevé du 20</a></li>{% endif %}
+                    {% if 'releve_site_smp' in accesses or 'releve_site_lpz' in accesses %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle {% if request.endpoint == 'releve_site' %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-clipboard-list me-2"></i>Relevés
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark">
+                                {% if 'releve_site_smp' in accesses %}<li><a class="dropdown-item {% if request.endpoint == 'releve_site' and request.view_args.site_id == 1 %}active{% endif %}" href="{{ url_for('releve_site', site_id=1) }}">SMP</a></li>{% endif %}
+                                {% if 'releve_site_lpz' in accesses %}<li><a class="dropdown-item {% if request.endpoint == 'releve_site' and request.view_args.site_id == 2 %}active{% endif %}" href="{{ url_for('releve_site', site_id=2) }}">LPZ</a></li>{% endif %}
+                            </ul>
+                        </li>
+                    {% endif %}
                     {% if 'routines' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'routines' %}active{% endif %}" href="{{ url_for('routines') }}"><i class="fas fa-tasks me-2"></i>Routines</a></li>{% endif %}
+                    {% if 'historique' in accesses or 'indicateurs' in accesses %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle {% if request.endpoint in ['historique', 'indicateurs'] %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-chart-line me-2"></i>Valeurs
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark">
+                                {% if 'historique' in accesses %}<li><a class="dropdown-item {% if request.endpoint == 'historique' %}active{% endif %}" href="{{ url_for('historique') }}">Historique</a></li>{% endif %}
+                                {% if 'indicateurs' in accesses %}<li><a class="dropdown-item {% if request.endpoint == 'indicateurs' %}active{% endif %}" href="{{ url_for('indicateurs') }}">Indicateurs</a></li>{% endif %}
+                            </ul>
+                        </li>
+                    {% endif %}
                     {% if 'code_magasin' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'code_magasin' %}active{% endif %}" href="{{ url_for('code_magasin') }}"><i class="fas fa-barcode me-2"></i>Code Magasin</a></li>{% endif %}
+                    {% if 'perso' in accesses %}<li class="nav-item"><a class="nav-link {% if request.endpoint == 'perso' %}active{% endif %}" href="{{ url_for('perso') }}"><i class="fas fa-user-tie me-2"></i>Perso</a></li>{% endif %}
                 {% endif %}
-                <li class="nav-item"><a class="nav-link logout-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i>Déconnexion</a></li>
+                <li class="nav-item"><a class="nav-link logout-link" href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt"></i></a></li>
             </ul>
         </div>
     </nav>
