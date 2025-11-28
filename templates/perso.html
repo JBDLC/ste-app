@@ -8,61 +8,203 @@
         margin: 0;
         padding: 0;
         background: var(--flot-bg);
-        overflow: auto;
+        overflow: visible;
     }
     .planning-global-fullwidth .card {
         margin: 0;
         border: none;
         border-radius: 15px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         display: flex;
         flex-direction: column;
+        max-height: calc(100vh - 250px);
+        overflow: hidden;
     }
     .planning-global-fullwidth .card-body {
         flex: 1;
-        overflow: auto;
+        overflow: hidden;
         padding: 0 !important;
+        display: flex;
+        flex-direction: column;
     }
     .planning-global-fullwidth table {
         font-size: 0.55rem;
         white-space: nowrap;
         table-layout: fixed;
         width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
     }
     .planning-global-fullwidth th:not(:first-child),
     .planning-global-fullwidth td:not(:first-child) {
-        padding: 0.05rem 0.08rem !important;
-        font-size: 0.5rem;
-        width: 10px !important;
-        min-width: 10px !important;
-        max-width: 10px !important;
+        padding: 0.25rem 0.15rem !important;
+        font-size: 0.65rem;
+        width: 14px !important;
+        min-width: 14px !important;
+        max-width: 14px !important;
         text-align: center;
         overflow: hidden;
         text-overflow: ellipsis;
+        border: 1px solid #dee2e6;
+        vertical-align: middle;
+        font-weight: 500;
+    }
+    .planning-global-fullwidth th:not(:first-child) {
+        background: #f8f9fa;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
     }
     .planning-global-fullwidth th:first-child,
     .planning-global-fullwidth td:first-child {
-        width: 70px !important;
-        min-width: 70px !important;
-        max-width: 70px !important;
+        width: 90px !important;
+        min-width: 90px !important;
+        max-width: 90px !important;
         position: sticky;
         left: 0;
         background: white;
         z-index: 10;
         text-align: left;
-        padding: 0.1rem 0.2rem !important;
-        font-size: 0.6rem !important;
+        padding: 0.35rem 0.5rem !important;
+        font-size: 0.7rem !important;
+        border: 1px solid #dee2e6;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.05);
     }
     .planning-global-fullwidth thead th:first-child {
         background: #f8f9fa;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.05);
     }
     .planning-global-fullwidth .card-header {
-        padding: 0.4rem 0.8rem;
+        padding: 0.75rem 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px 15px 0 0;
     }
     .planning-global-fullwidth .card-header h5 {
-        font-size: 0.9rem;
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0;
     }
     .planning-global-fullwidth .table-responsive {
         overflow-x: visible !important;
+    }
+    
+    /* Couleurs personnalisées pour le planning */
+    .planning-jour-journee {
+        background-color: #28a745 !important;
+        color: white !important;
+    }
+    .planning-jour-matin {
+        background-color: #007bff !important;
+        color: white !important;
+    }
+    .planning-jour-apres-midi {
+        background-color: #ff1493 !important; /* Fuchsia */
+        color: white !important;
+    }
+    .planning-jour-repos {
+        background-color: #ffffff !important;
+        color: #333 !important;
+    }
+    .planning-conge-en-attente {
+        background-color: #6c757d !important; /* Gris */
+        color: white !important;
+    }
+    .planning-conge-valide {
+        background-color: #212529 !important; /* Noir */
+        color: white !important;
+    }
+    .planning-absence-justifiee {
+        background-color: #fd7e14 !important; /* Orange */
+        color: white !important;
+    }
+    .planning-absence-non-justifiee {
+        background-color: #dc3545 !important; /* Rouge */
+        color: white !important;
+    }
+    .planning-formation {
+        background-color: #6f42c1 !important; /* Violet */
+        color: white !important;
+    }
+    
+    /* Légende améliorée */
+    .planning-legend {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 0 0 15px 15px;
+        border-top: 1px solid #dee2e6;
+    }
+    .planning-legend-item {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 1rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.75rem;
+    }
+    .planning-legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        margin-right: 0.5rem;
+        border: 1px solid #dee2e6;
+        display: inline-block;
+    }
+    
+    /* Cellules cliquables */
+    .planning-cell-clickable {
+        cursor: pointer;
+        transition: opacity 0.2s ease;
+    }
+    .planning-cell-clickable:hover {
+        opacity: 0.8;
+    }
+    
+    /* Désactiver TOUS les effets de décalage au survol sur toute la page Perso */
+    /* Surcharger les styles de base.html qui causent des décalages */
+    body .container-fluid .card,
+    body .container-fluid .card-header,
+    body .container-fluid .card-body,
+    body .container-fluid .table,
+    body .container-fluid .table-responsive,
+    body .container-fluid .table-striped,
+    body .container-fluid tr,
+    body .container-fluid td,
+    body .container-fluid th {
+        transform: none !important;
+        translate: none !important;
+    }
+    
+    /* Désactiver les transitions de transform */
+    body .container-fluid .card,
+    body .container-fluid .card-header,
+    body .container-fluid .card-body {
+        transition-property: background-color, color, border-color, opacity, box-shadow !important;
+        transition-duration: 0.2s !important;
+        transition-timing-function: ease !important;
+    }
+    
+    /* Pas de transform au survol - SURCHARGER base.html */
+    body .container-fluid .card:hover,
+    body .container-fluid .card-header:hover,
+    body .container-fluid .card-body:hover,
+    body .container-fluid .table:hover,
+    body .container-fluid tr:hover,
+    body .container-fluid td:hover,
+    body .container-fluid th:hover {
+        transform: none !important;
+    }
+    
+    /* Désactiver sur les boutons mais garder les effets de couleur */
+    body .container-fluid .btn {
+        transition-property: background-color, color, border-color, box-shadow !important;
+    }
+    body .container-fluid .btn:hover {
+        transform: none !important;
+    }
+    
+    /* Désactiver le zoom sur les cellules du planning */
+    .planning-cell-clickable:hover {
+        transform: none !important;
+        scale: none !important;
     }
 </style>
 {% endblock %}
@@ -115,12 +257,15 @@
                                     <th class="text-center">Poste</th>
                                     <th class="text-center">Société</th>
                                     <th class="text-center">Documents</th>
+                                    {% if current_user.role == 'admin' %}
+                                    <th class="text-center">Signature</th>
+                                    {% endif %}
                                     <th class="text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="personnel-tbody">
                                 <tr>
-                                    <td colspan="8" class="text-center">Chargement...</td>
+                                    <td colspan="{% if current_user.role == 'admin' %}9{% else %}8{% endif %}" class="text-center">Chargement...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -220,7 +365,7 @@
                         </div>
                     </div>
                     <div class="card-body p-0">
-                        <div id="planning-global-content" style="width: 100%; overflow-x: auto;">
+                        <div id="planning-global-content" style="width: 100%; overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 350px); flex: 1;">
                             <div class="text-center p-3">
                                 <div class="spinner-border" role="status"><span class="visually-hidden">Chargement...</span></div>
                             </div>
@@ -362,7 +507,7 @@
                         </div>
                     </div>
                     <div class="card-body p-0">
-                        <div id="planning-personnel-content" style="width: 100%; overflow-x: auto;">
+                        <div id="planning-personnel-content" style="width: 100%; overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 350px); flex: 1;">
                             <div class="text-center p-3">
                                 <div class="spinner-border" role="status"><span class="visually-hidden">Chargement...</span></div>
                             </div>
@@ -805,10 +950,124 @@
     </div>
 </div>
 
+<!-- Modal Détails du Jour (Planning) -->
+<div class="modal fade" id="planningDayDetailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="planningDayDetailModalTitle">Détails du jour</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="planningDayDetailModalBody">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Chargement...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Modifier mes informations personnelles -->
+<div class="modal fade" id="editInfosModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifier mes informations</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-infos-form">
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="edit-infos-email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Téléphone</label>
+                        <input type="text" class="form-control" id="edit-infos-telephone">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="saveMesInfos()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Modifier mon mot de passe -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Modifier mon mot de passe</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="change-password-form">
+                    <div class="mb-3">
+                        <label class="form-label">Ancien mot de passe</label>
+                        <input type="password" class="form-control" id="old-password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nouveau mot de passe</label>
+                        <input type="password" class="form-control" id="new-password" required minlength="6">
+                        <small class="text-muted">Le mot de passe doit contenir au moins 6 caractères</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Confirmer le nouveau mot de passe</label>
+                        <input type="password" class="form-control" id="confirm-password" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="savePassword()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if current_user.role == 'admin' %}
+<!-- Modal Admin: Importer signature d'un personnel -->
+<div class="modal fade" id="adminUploadSignatureModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="adminUploadSignatureModalTitle">Importer la signature</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">Personnel: <strong id="admin-signature-personnel-name"></strong></p>
+                <form id="admin-upload-signature-form" enctype="multipart/form-data">
+                    <input type="hidden" id="admin-signature-personnel-id">
+                    <div class="mb-3">
+                        <label class="form-label">Fichier image de la signature</label>
+                        <input type="file" class="form-control" id="admin-signature-file" accept="image/*" required>
+                        <small class="text-muted">Formats acceptés: PNG, JPG, JPEG, GIF, WEBP</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="uploadAdminSignature()">Importer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// Variable globale pour connaître le rôle de l'utilisateur
+const isAdmin = {% if current_user.role == 'admin' %}true{% else %}false{% endif %};
 let currentPersonnelId = null;
 let currentPersonnelUserId = null;
 
@@ -891,8 +1150,9 @@ function loadPersonnel() {
         .then(r => r.json())
         .then(data => {
             const tbody = document.getElementById('personnel-tbody');
+            const colspan = isAdmin ? 9 : 8;
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun membre du personnel</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">Aucun membre du personnel</td></tr>`;
                 return;
             }
             // Charger le nombre de documents pour chaque personnel
@@ -902,6 +1162,11 @@ function loadPersonnel() {
                     .then(docs => ({...p, nb_documents: docs.length}))
                     .catch(() => ({...p, nb_documents: 0}))
             )).then(personnelWithDocs => {
+                const colspan = isAdmin ? 9 : 8;
+                if (personnelWithDocs.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">Aucun membre du personnel</td></tr>`;
+                    return;
+                }
                 tbody.innerHTML = personnelWithDocs.map(p => `
                     <tr>
                         <td>${p.nom}</td>
@@ -915,6 +1180,13 @@ function loadPersonnel() {
                                 <i class="fas fa-file-alt"></i> <span class="ms-1">${p.nb_documents}</span>
                             </button>
                         </td>
+                        ${isAdmin ? `
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-warning" onclick="showUploadSignatureModal(${p.id}, '${(p.prenom + ' ' + p.nom).replace(/'/g, "\\'")}')" title="Importer la signature">
+                                <i class="fas fa-signature"></i>
+                            </button>
+                        </td>
+                        ` : ''}
                         <td class="text-center">
                             <div class="btn-group btn-group-sm" role="group" aria-label="Actions personnel">
                                 <button class="btn btn-outline-primary" onclick="editPersonnel(${p.id})" title="Modifier le profil">
@@ -1542,6 +1814,46 @@ function showDocumentModal(personnelId) {
     new bootstrap.Modal(document.getElementById('documentModal')).show();
 }
 
+{% if current_user.role == 'admin' %}
+function showUploadSignatureModal(personnelId, personnelNom) {
+    document.getElementById('admin-signature-personnel-id').value = personnelId;
+    document.getElementById('admin-signature-personnel-name').textContent = personnelNom;
+    document.getElementById('admin-upload-signature-form').reset();
+    new bootstrap.Modal(document.getElementById('adminUploadSignatureModal')).show();
+}
+
+function uploadAdminSignature() {
+    const personnelId = document.getElementById('admin-signature-personnel-id').value;
+    const fileInput = document.getElementById('admin-signature-file');
+    
+    if (!fileInput.files || !fileInput.files[0]) {
+        alert('Veuillez sélectionner un fichier');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    fetch(`/api/perso/admin/personnel/${personnelId}/signature`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            alert(data.message || 'Signature importée avec succès');
+            bootstrap.Modal.getInstance(document.getElementById('adminUploadSignatureModal')).hide();
+        }
+    })
+    .catch(error => {
+        console.error('Erreur lors de l\'upload:', error);
+        alert('Erreur lors de l\'upload de la signature');
+    });
+}
+{% endif %}
+
 function saveDocument() {
     const formData = new FormData();
     formData.append('file', document.getElementById('document-file').files[0]);
@@ -2002,14 +2314,14 @@ function renderPlanningGlobal(data, mois, annee, focusPersonnelId = null) {
     const dayCellWidthPx = 10; // Largeur fixe de 10px
     
     let html = `<div class="p-1"><h6 class="mb-0" style="font-size: 0.85rem;">${moisNoms[mois - 1]} ${annee}</h6></div>`;
-    html += '<div style="width: 100%; overflow-x: hidden;"><table class="table table-bordered table-sm mb-0" style="width: 100%; font-size: 0.55rem; border-collapse: collapse; table-layout: fixed;">';
-    html += '<thead class="sticky-top bg-light"><tr><th style="width: 70px; min-width: 70px; max-width: 70px; position: sticky; left: 0; background: #f8f9fa; z-index: 10; padding: 0.1rem 0.2rem !important; font-size: 0.6rem;">Personnel</th>';
+    html += '<div style="width: 100%; overflow-x: hidden;"><table class="table table-bordered table-sm mb-0" style="width: 100%; font-size: 0.55rem; border-collapse: separate; border-spacing: 0; table-layout: fixed;">';
+    html += '<thead class="sticky-top bg-light"><tr><th style="width: 90px; min-width: 90px; max-width: 90px; position: sticky; left: 0; background: #f8f9fa; z-index: 10; padding: 0.35rem 0.5rem !important; font-size: 0.7rem; box-shadow: 2px 0 4px rgba(0,0,0,0.05);">Personnel</th>';
     
     // En-têtes des jours
     for (let jour = 1; jour <= nbJours; jour++) {
         const date = new Date(annee, mois - 1, jour);
         const jourSemaine = jourNoms[date.getDay() === 0 ? 6 : date.getDay() - 1];
-        html += `<th class="text-center" style="width: 10px !important; min-width: 10px !important; max-width: 10px !important; padding: 0.05rem 0.08rem !important; font-size: 0.5rem;">${jour}<br><small style="font-size: 0.4rem;">${jourSemaine}</small></th>`;
+        html += `<th class="text-center" style="width: 14px !important; min-width: 14px !important; max-width: 14px !important; padding: 0.25rem 0.15rem !important; font-size: 0.65rem; font-weight: 600;">${jour}<br><small style="font-size: 0.5rem;">${jourSemaine}</small></th>`;
     }
     html += '</tr></thead><tbody>';
     
@@ -2020,7 +2332,7 @@ function renderPlanningGlobal(data, mois, annee, focusPersonnelId = null) {
         }
         
         const rowClass = focusPersonnelId && personnel.personnel_id === focusPersonnelId ? 'table-warning' : '';
-        html += `<tr class="${rowClass}"><td style="position: sticky; left: 0; background: white; z-index: 5; padding: 0.1rem 0.2rem !important; width: 70px; min-width: 70px; max-width: 70px;"><strong style="font-size: 0.6rem; word-break: break-word; line-height: 1.1; display: block;">${personnel.personnel_nom || 'Inconnu'}</strong></td>`;
+        html += `<tr class="${rowClass}"><td style="position: sticky; left: 0; background: white; z-index: 5; padding: 0.35rem 0.5rem !important; width: 90px; min-width: 90px; max-width: 90px; box-shadow: 2px 0 4px rgba(0,0,0,0.05);"><strong style="font-size: 0.7rem; word-break: break-word; line-height: 1.1; display: block;">${personnel.personnel_nom || 'Inconnu'}</strong></td>`;
         
         // Pour chaque jour du mois
         for (let jour = 1; jour <= nbJours; jour++) {
@@ -2032,22 +2344,26 @@ function renderPlanningGlobal(data, mois, annee, focusPersonnelId = null) {
             
             if (jourData) {
                 if (jourData.formation) {
-                    cellClass = jourData.formation.statut === 'realisee' ? 'bg-success text-white' : 'bg-warning text-dark';
+                    cellClass = 'planning-formation';
                     cellContent = 'F';
                 } else if (jourData.conge) {
-                    // Orange pour en attente, vert pour accepté
-                    cellClass = jourData.conge.statut === 'accepte' ? 'bg-success text-white' : 'bg-warning text-dark';
+                    // Gris pour en attente, noir pour accepté
+                    if (jourData.conge.statut === 'accepte') {
+                        cellClass = 'planning-conge-valide';
+                    } else {
+                        cellClass = 'planning-conge-en-attente';
+                    }
                     cellContent = 'C';
                 } else if (jourData.absence) {
                     if (jourData.absence.type === 'justifiee') {
-                        cellClass = 'bg-info text-white';
+                        cellClass = 'planning-absence-justifiee';
                         cellContent = 'AJ';
                     } else if (jourData.absence.type === 'injustifiee') {
-                        cellClass = 'bg-danger text-white';
+                        cellClass = 'planning-absence-non-justifiee';
                         cellContent = 'AI';
                     } else {
-                        cellClass = 'bg-warning';
-                        cellContent = 'F';
+                        cellClass = 'planning-absence-justifiee';
+                        cellContent = 'AJ';
                     }
                 } else if (jourData.type_journee) {
                     const abbrev = {
@@ -2057,25 +2373,155 @@ function renderPlanningGlobal(data, mois, annee, focusPersonnelId = null) {
                         'nuit': 'N'
                     };
                     const colors = {
-                        'matin': 'bg-primary text-white',
-                        'apres_midi': 'bg-secondary text-white',
-                        'journee': 'bg-dark text-white',
-                        'nuit': 'bg-dark text-white'
+                        'matin': 'planning-jour-matin',
+                        'apres_midi': 'planning-jour-apres-midi',
+                        'journee': 'planning-jour-journee',
+                        'nuit': 'planning-jour-journee' // Nuit en vert aussi (journée complète)
                     };
                     cellClass = colors[jourData.type_journee] || '';
                     cellContent = abbrev[jourData.type_journee] || '';
                 }
+            } else {
+                // Jour de repos (pas de données)
+                cellClass = 'planning-jour-repos';
             }
             
-            html += `<td class="text-center ${cellClass}" style="font-size: 0.5rem; padding: 0.05rem 0.08rem !important; width: 10px !important; min-width: 10px !important; max-width: 10px !important;">${cellContent}</td>`;
+            // Préparer les données pour le clic
+            const personnelNom = personnel.personnel_nom || 'Inconnu';
+            const dataJson = jourData ? JSON.stringify(jourData) : '{}';
+            
+            html += `<td class="text-center ${cellClass} planning-cell-clickable" 
+                     style="font-size: 0.65rem; padding: 0.25rem 0.15rem !important; width: 14px !important; min-width: 14px !important; max-width: 14px !important; font-weight: 500;" 
+                     onclick="showPlanningDayDetailFromCell(this)"
+                     data-date="${dateStr}"
+                     data-personnel="${personnelNom.replace(/"/g, '&quot;')}"
+                     data-jour-data="${dataJson.replace(/"/g, '&quot;')}"
+                     title="Cliquer pour voir les détails">${cellContent}</td>`;
         }
         html += '</tr>';
     });
     
     html += '</tbody></table></div>';
-    html += '<div class="p-1"><small style="font-size: 0.55rem;"><strong>Légende:</strong> M=Matin, AM=Après-midi, J=Journée, N=Nuit, C=Congé, AJ=Absence justifiée, AI=Absence injustifiée, F=Formation</small></div>';
+    html += `<div class="planning-legend">
+        <div class="planning-legend-item"><span class="planning-legend-color planning-jour-journee"></span><strong>Journée</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-jour-matin"></span><strong>Matin</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-jour-apres-midi"></span><strong>Après-midi</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-jour-repos" style="border: 1px solid #dee2e6;"></span><strong>Repos</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-conge-en-attente"></span><strong>Congé en attente</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-conge-valide"></span><strong>Congé validé</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-absence-justifiee"></span><strong>Absence justifiée</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-absence-non-justifiee"></span><strong>Absence non justifiée</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-formation"></span><strong>Formation</strong></div>
+    </div>`;
     
     contentDiv.innerHTML = html;
+}
+
+function showPlanningDayDetailFromCell(cellElement) {
+    const dateStr = cellElement.getAttribute('data-date');
+    const personnelNom = cellElement.getAttribute('data-personnel');
+    const dataJsonStr = cellElement.getAttribute('data-jour-data');
+    showPlanningDayDetail(dateStr, personnelNom, dataJsonStr);
+}
+
+function showPlanningDayDetail(dateStr, personnelNom, dataJsonStr) {
+    const modal = document.getElementById('planningDayDetailModal');
+    const modalTitle = document.getElementById('planningDayDetailModalTitle');
+    const modalBody = document.getElementById('planningDayDetailModalBody');
+    
+    // Parser les données JSON
+    let jourData = null;
+    try {
+        const decoded = dataJsonStr ? dataJsonStr.replace(/&quot;/g, '"') : '{}';
+        jourData = decoded && decoded !== '{}' ? JSON.parse(decoded) : null;
+    } catch (e) {
+        console.error('Erreur parsing JSON:', e, dataJsonStr);
+        jourData = null;
+    }
+    
+    // Formater la date
+    const date = new Date(dateStr);
+    const dateFormatee = date.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    modalTitle.textContent = `Détails - ${dateFormatee}`;
+    
+    // Construire le contenu de la modal
+    let html = `<div class="mb-3">
+        <h6 class="mb-2"><i class="fas fa-user me-2"></i>Personnel</h6>
+        <p class="mb-0">${personnelNom}</p>
+    </div>
+    <div class="mb-3">
+        <h6 class="mb-2"><i class="fas fa-calendar me-2"></i>Date</h6>
+        <p class="mb-0">${dateFormatee}</p>
+    </div>`;
+    
+    if (!jourData || (!jourData.type_journee && !jourData.conge && !jourData.absence && !jourData.formation)) {
+        html += `<div class="alert alert-info mb-0">
+            <i class="fas fa-info-circle me-2"></i>Jour de repos - Aucune activité prévue
+        </div>`;
+    } else {
+        // Type de journée
+        if (jourData.type_journee) {
+            const types = {
+                'matin': 'Matin',
+                'apres_midi': 'Après-midi',
+                'journee': 'Journée complète',
+                'nuit': 'Nuit'
+            };
+            html += `<div class="mb-3">
+                <h6 class="mb-2"><i class="fas fa-clock me-2"></i>Type de journée</h6>
+                <p class="mb-0"><span class="badge planning-jour-${jourData.type_journee}">${types[jourData.type_journee] || jourData.type_journee}</span></p>
+            </div>`;
+        }
+        
+        // Congé
+        if (jourData.conge) {
+            const statuts = {
+                'en_attente': 'En attente de validation',
+                'accepte': 'Accepté',
+                'refuse': 'Refusé'
+            };
+            html += `<div class="mb-3">
+                <h6 class="mb-2"><i class="fas fa-calendar-alt me-2"></i>Congé</h6>
+                <p class="mb-0">
+                    <span class="badge ${jourData.conge.statut === 'accepte' ? 'planning-conge-valide' : 'planning-conge-en-attente'}">${statuts[jourData.conge.statut] || jourData.conge.statut}</span>
+                    ${jourData.conge.type_conge ? ` - ${jourData.conge.type_conge}` : ''}
+                </p>
+                ${jourData.conge.commentaire ? `<p class="mt-2 text-muted"><small>${jourData.conge.commentaire}</small></p>` : ''}
+            </div>`;
+        }
+        
+        // Absence
+        if (jourData.absence) {
+            const types = {
+                'justifiee': 'Absence justifiée',
+                'injustifiee': 'Absence non justifiée'
+            };
+            html += `<div class="mb-3">
+                <h6 class="mb-2"><i class="fas fa-user-times me-2"></i>Absence</h6>
+                <p class="mb-0">
+                    <span class="badge ${jourData.absence.type === 'justifiee' ? 'planning-absence-justifiee' : 'planning-absence-non-justifiee'}">${types[jourData.absence.type] || jourData.absence.type}</span>
+                </p>
+                ${jourData.absence.commentaire ? `<p class="mt-2 text-muted"><small>${jourData.absence.commentaire}</small></p>` : ''}
+            </div>`;
+        }
+        
+        // Formation
+        if (jourData.formation) {
+            const statuts = {
+                'prevue': 'Prévue',
+                'realisee': 'Réalisée'
+            };
+            html += `<div class="mb-3">
+                <h6 class="mb-2"><i class="fas fa-graduation-cap me-2"></i>Formation</h6>
+                <p class="mb-1"><strong>${jourData.formation.nom || 'Formation'}</strong></p>
+                <p class="mb-0"><span class="badge planning-formation">${statuts[jourData.formation.statut] || jourData.formation.statut}</span></p>
+                ${jourData.formation.description ? `<p class="mt-2 text-muted"><small>${jourData.formation.description}</small></p>` : ''}
+            </div>`;
+        }
+    }
+    
+    modalBody.innerHTML = html;
+    new bootstrap.Modal(modal).show();
 }
 
 function previousMonthGlobal() {
@@ -2238,13 +2684,13 @@ function renderPlanningPersonnel(data, mois, annee, focusPersonnelId = null) {
     const nbJours = dernierJour.getDate();
     
     let html = `<div class="p-1"><h6 class="mb-0" style="font-size: 0.85rem;">${moisNoms[mois - 1]} ${annee}</h6></div>`;
-    html += '<div style="width: 100%; overflow-x: hidden;"><table class="table table-bordered table-sm mb-0" style="width: 100%; font-size: 0.55rem; border-collapse: collapse; table-layout: fixed;">';
-    html += '<thead class="sticky-top bg-light"><tr><th style="width: 70px; min-width: 70px; max-width: 70px; position: sticky; left: 0; background: #f8f9fa; z-index: 10; padding: 0.1rem 0.2rem !important; font-size: 0.6rem;">Personnel</th>';
+    html += '<div style="width: 100%; overflow-x: hidden;"><table class="table table-bordered table-sm mb-0" style="width: 100%; font-size: 0.55rem; border-collapse: separate; border-spacing: 0; table-layout: fixed;">';
+    html += '<thead class="sticky-top bg-light"><tr><th style="width: 90px; min-width: 90px; max-width: 90px; position: sticky; left: 0; background: #f8f9fa; z-index: 10; padding: 0.35rem 0.5rem !important; font-size: 0.7rem; box-shadow: 2px 0 4px rgba(0,0,0,0.05);">Personnel</th>';
     
     for (let jour = 1; jour <= nbJours; jour++) {
         const date = new Date(annee, mois - 1, jour);
         const jourSemaine = jourNoms[date.getDay() === 0 ? 6 : date.getDay() - 1];
-        html += `<th class="text-center" style="width: 10px !important; min-width: 10px !important; max-width: 10px !important; padding: 0.05rem 0.08rem !important; font-size: 0.5rem;">${jour}<br><small style="font-size: 0.4rem;">${jourSemaine}</small></th>`;
+        html += `<th class="text-center" style="width: 14px !important; min-width: 14px !important; max-width: 14px !important; padding: 0.25rem 0.15rem !important; font-size: 0.65rem; font-weight: 600;">${jour}<br><small style="font-size: 0.5rem;">${jourSemaine}</small></th>`;
     }
     html += '</tr></thead><tbody>';
     
@@ -2252,7 +2698,7 @@ function renderPlanningPersonnel(data, mois, annee, focusPersonnelId = null) {
         if (!personnel || !personnel.planning) return;
         
         const rowClass = focusPersonnelId && personnel.personnel_id === focusPersonnelId ? 'table-warning' : '';
-        html += `<tr class="${rowClass}"><td style="position: sticky; left: 0; background: white; z-index: 5; padding: 0.1rem 0.2rem !important; width: 70px; min-width: 70px; max-width: 70px;"><strong style="font-size: 0.6rem; word-break: break-word; line-height: 1.1; display: block;">${personnel.personnel_nom || 'Inconnu'}</strong></td>`;
+        html += `<tr class="${rowClass}"><td style="position: sticky; left: 0; background: white; z-index: 5; padding: 0.35rem 0.5rem !important; width: 90px; min-width: 90px; max-width: 90px; box-shadow: 2px 0 4px rgba(0,0,0,0.05);"><strong style="font-size: 0.7rem; word-break: break-word; line-height: 1.1; display: block;">${personnel.personnel_nom || 'Inconnu'}</strong></td>`;
         
         for (let jour = 1; jour <= nbJours; jour++) {
             const dateStr = `${annee}-${String(mois).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
@@ -2263,37 +2709,70 @@ function renderPlanningPersonnel(data, mois, annee, focusPersonnelId = null) {
             
             if (jourData) {
                 if (jourData.formation) {
-                    cellClass = jourData.formation.statut === 'realisee' ? 'bg-success text-white' : 'bg-warning text-dark';
+                    cellClass = 'planning-formation';
                     cellContent = 'F';
                 } else if (jourData.conge) {
-                    cellClass = jourData.conge.statut === 'accepte' ? 'bg-success text-white' : 'bg-warning text-dark';
+                    // Gris pour en attente, noir pour accepté
+                    if (jourData.conge.statut === 'accepte') {
+                        cellClass = 'planning-conge-valide';
+                    } else {
+                        cellClass = 'planning-conge-en-attente';
+                    }
                     cellContent = 'C';
                 } else if (jourData.absence) {
                     if (jourData.absence.type === 'justifiee') {
-                        cellClass = 'bg-info text-white';
+                        cellClass = 'planning-absence-justifiee';
                         cellContent = 'AJ';
                     } else if (jourData.absence.type === 'injustifiee') {
-                        cellClass = 'bg-danger text-white';
+                        cellClass = 'planning-absence-non-justifiee';
                         cellContent = 'AI';
                     } else {
-                        cellClass = 'bg-warning';
-                        cellContent = 'F';
+                        cellClass = 'planning-absence-justifiee';
+                        cellContent = 'AJ';
                     }
                 } else if (jourData.type_journee) {
                     const abbrev = {'matin': 'M', 'apres_midi': 'AM', 'journee': 'J', 'nuit': 'N'};
-                    const colors = {'matin': 'bg-primary text-white', 'apres_midi': 'bg-secondary text-white', 'journee': 'bg-dark text-white', 'nuit': 'bg-dark text-white'};
+                    const colors = {
+                        'matin': 'planning-jour-matin',
+                        'apres_midi': 'planning-jour-apres-midi',
+                        'journee': 'planning-jour-journee',
+                        'nuit': 'planning-jour-journee' // Nuit en vert aussi (journée complète)
+                    };
                     cellClass = colors[jourData.type_journee] || '';
                     cellContent = abbrev[jourData.type_journee] || '';
                 }
+            } else {
+                // Jour de repos (pas de données)
+                cellClass = 'planning-jour-repos';
             }
             
-            html += `<td class="text-center ${cellClass}" style="font-size: 0.5rem; padding: 0.05rem 0.08rem !important; width: 10px !important; min-width: 10px !important; max-width: 10px !important;">${cellContent}</td>`;
+            // Préparer les données pour le clic
+            const personnelNom = personnel.personnel_nom || 'Inconnu';
+            const dataJson = jourData ? JSON.stringify(jourData) : '{}';
+            
+            html += `<td class="text-center ${cellClass} planning-cell-clickable" 
+                     style="font-size: 0.65rem; padding: 0.25rem 0.15rem !important; width: 14px !important; min-width: 14px !important; max-width: 14px !important; font-weight: 500;" 
+                     onclick="showPlanningDayDetailFromCell(this)"
+                     data-date="${dateStr}"
+                     data-personnel="${personnelNom.replace(/"/g, '&quot;')}"
+                     data-jour-data="${dataJson.replace(/"/g, '&quot;')}"
+                     title="Cliquer pour voir les détails">${cellContent}</td>`;
         }
         html += '</tr>';
     });
     
     html += '</tbody></table></div>';
-    html += '<div class="p-1"><small style="font-size: 0.55rem;"><strong>Légende:</strong> M=Matin, AM=Après-midi, J=Journée, N=Nuit, C=Congé, AJ=Absence justifiée, AI=Absence injustifiée, F=Formation</small></div>';
+    html += `<div class="planning-legend">
+        <div class="planning-legend-item"><span class="planning-legend-color planning-jour-journee"></span><strong>Journée</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-jour-matin"></span><strong>Matin</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-jour-apres-midi"></span><strong>Après-midi</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-jour-repos" style="border: 1px solid #dee2e6;"></span><strong>Repos</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-conge-en-attente"></span><strong>Congé en attente</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-conge-valide"></span><strong>Congé validé</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-absence-justifiee"></span><strong>Absence justifiée</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-absence-non-justifiee"></span><strong>Absence non justifiée</strong></div>
+        <div class="planning-legend-item"><span class="planning-legend-color planning-formation"></span><strong>Formation</strong></div>
+    </div>`;
     
     contentDiv.innerHTML = html;
 }
@@ -2336,6 +2815,9 @@ function loadMonProfil() {
             currentPersonnelId = p.id;
             currentPersonnelUserId = p.user_id;
             
+            // Stocker les données du profil pour les modifications
+            currentProfilData = p;
+            
             // Afficher le récapitulatif
             afficherRecapitulatif(p);
             
@@ -2361,8 +2843,11 @@ function afficherRecapitulatif(p) {
         <div class="row">
             <div class="col-md-6">
                 <div class="card mb-3">
-                    <div class="card-header bg-primary text-white">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                         <h6 class="mb-0"><i class="fas fa-id-card me-2"></i>Informations personnelles</h6>
+                        <button class="btn btn-sm btn-light" onclick="showEditInfosModal()">
+                            <i class="fas fa-edit me-1"></i>Modifier
+                        </button>
                     </div>
                     <div class="card-body">
                         <table class="table table-borderless mb-0">
@@ -2376,17 +2861,28 @@ function afficherRecapitulatif(p) {
                             </tr>
                             <tr>
                                 <td class="fw-bold">Email :</td>
-                                <td>${p.email || '-'}</td>
+                                <td id="recap-email">${p.email || '-'}</td>
                             </tr>
                             <tr>
                                 <td class="fw-bold">Téléphone :</td>
-                                <td>${p.telephone || '-'}</td>
+                                <td id="recap-telephone">${p.telephone || '-'}</td>
                             </tr>
                             <tr>
                                 <td class="fw-bold">Date d'embauche :</td>
                                 <td>${dateEmbauche}</td>
                             </tr>
                         </table>
+                    </div>
+                </div>
+                <div class="card mb-3">
+                    <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="fas fa-key me-2"></i>Mot de passe</h6>
+                        <button class="btn btn-sm btn-dark" onclick="showChangePasswordModal()">
+                            <i class="fas fa-lock me-1"></i>Modifier
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-0"><small>Cliquez sur "Modifier" pour changer votre mot de passe</small></p>
                     </div>
                 </div>
             </div>
@@ -2421,6 +2917,108 @@ function afficherRecapitulatif(p) {
     `;
     
     contentDiv.innerHTML = html;
+}
+
+// Variable globale pour stocker les données du profil
+let currentProfilData = null;
+
+function showEditInfosModal() {
+    if (!currentProfilData) {
+        alert('Erreur: Données du profil non chargées');
+        return;
+    }
+    
+    document.getElementById('edit-infos-email').value = currentProfilData.email || '';
+    document.getElementById('edit-infos-telephone').value = currentProfilData.telephone || '';
+    new bootstrap.Modal(document.getElementById('editInfosModal')).show();
+}
+
+function saveMesInfos() {
+    const email = document.getElementById('edit-infos-email').value;
+    const telephone = document.getElementById('edit-infos-telephone').value;
+    
+    if (!email) {
+        alert('L\'email est obligatoire');
+        return;
+    }
+    
+    fetch('/api/perso/mon-compte/infos', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            email: email,
+            telephone: telephone
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            alert('Informations modifiées avec succès');
+            bootstrap.Modal.getInstance(document.getElementById('editInfosModal')).hide();
+            // Mettre à jour l'affichage
+            if (currentProfilData) {
+                currentProfilData.email = email;
+                currentProfilData.telephone = telephone;
+            }
+            document.getElementById('recap-email').textContent = email || '-';
+            document.getElementById('recap-telephone').textContent = telephone || '-';
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de la modification des informations');
+    });
+}
+
+function showChangePasswordModal() {
+    document.getElementById('change-password-form').reset();
+    new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+}
+
+function savePassword() {
+    const oldPassword = document.getElementById('old-password').value;
+    const newPassword = document.getElementById('new-password').value;
+    const confirmPassword = document.getElementById('confirm-password').value;
+    
+    if (!oldPassword || !newPassword || !confirmPassword) {
+        alert('Tous les champs sont obligatoires');
+        return;
+    }
+    
+    if (newPassword.length < 6) {
+        alert('Le nouveau mot de passe doit contenir au moins 6 caractères');
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        alert('Les mots de passe ne correspondent pas');
+        return;
+    }
+    
+    fetch('/api/perso/mon-compte/password', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            ancien_password: oldPassword,
+            nouveau_password: newPassword
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            alert('Mot de passe modifié avec succès');
+            bootstrap.Modal.getInstance(document.getElementById('changePasswordModal')).hide();
+            document.getElementById('change-password-form').reset();
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de la modification du mot de passe');
+    });
 }
 
 function loadMesConges() {
@@ -2576,25 +3174,37 @@ function renderPlanning(planning, mois, annee) {
         let cellContent = date.getDate();
         
         if (jour.formation) {
-            cellClass = jour.formation.statut === 'realisee' ? 'bg-success text-white' : 'bg-warning text-dark';
+            cellClass = 'planning-formation';
             cellContent += ` (Formation: ${jour.formation.nom})`;
         } else if (jour.conge) {
-            // Orange pour en attente, vert pour accepté
-            cellClass = jour.conge.statut === 'accepte' ? 'bg-success text-white' : 'bg-warning text-dark';
+            // Gris pour en attente, noir pour accepté
+            if (jour.conge.statut === 'accepte') {
+                cellClass = 'planning-conge-valide';
+            } else {
+                cellClass = 'planning-conge-en-attente';
+            }
             cellContent += ' (Congé)';
         } else if (jour.absence) {
-            cellClass = jour.absence.type === 'justifiee' ? 'bg-info text-white' : 
-                       jour.absence.type === 'injustifiee' ? 'bg-danger text-white' : 'bg-warning';
+            if (jour.absence.type === 'justifiee') {
+                cellClass = 'planning-absence-justifiee';
+            } else if (jour.absence.type === 'injustifiee') {
+                cellClass = 'planning-absence-non-justifiee';
+            } else {
+                cellClass = 'planning-absence-justifiee';
+            }
             cellContent += ` (${jour.absence.type})`;
         } else if (jour.type_journee) {
             const colors = {
-                'matin': 'bg-primary text-white',
-                'apres_midi': 'bg-secondary text-white',
-                'journee': 'bg-dark text-white',
-                'nuit': 'bg-dark text-white'
+                'matin': 'planning-jour-matin',
+                'apres_midi': 'planning-jour-apres-midi',
+                'journee': 'planning-jour-journee',
+                'nuit': 'planning-jour-journee' // Nuit en vert aussi (journée complète)
             };
             cellClass = colors[jour.type_journee] || '';
             cellContent += ` (${jour.type_journee})`;
+        } else {
+            // Jour de repos (pas de données)
+            cellClass = 'planning-jour-repos';
         }
         
         semaine.push({content: cellContent, class: cellClass});

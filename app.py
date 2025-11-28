@@ -3197,6 +3197,110 @@ def api_upload_signature():
         print(f"Erreur lors de l'upload de la signature: {e}")
         return jsonify({'error': f'Erreur lors de l\'upload: {str(e)}'}), 500
 
+# API - Modifier le mot de passe de l'utilisateur connecté
+@app.route('/api/perso/mon-compte/password', methods=['PUT'])
+@require_page_access('perso')
+def api_modifier_mon_password():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Données JSON manquantes'}), 400
+    
+    ancien_password = data.get('ancien_password')
+    nouveau_password = data.get('nouveau_password')
+    
+    if not ancien_password or not nouveau_password:
+        return jsonify({'error': 'Ancien et nouveau mot de passe requis'}), 400
+    
+    # Vérifier l'ancien mot de passe
+    if not check_password_hash(current_user.password_hash, ancien_password):
+        return jsonify({'error': 'Ancien mot de passe incorrect'}), 400
+    
+    # Vérifier que le nouveau mot de passe est différent
+    if check_password_hash(current_user.password_hash, nouveau_password):
+        return jsonify({'error': 'Le nouveau mot de passe doit être différent de l\'ancien'}), 400
+    
+    # Mettre à jour le mot de passe
+    current_user.password_hash = generate_password_hash(nouveau_password)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Mot de passe modifié avec succès'})
+
+# API - Modifier mes informations personnelles (email, téléphone)
+@app.route('/api/perso/mon-compte/infos', methods=['PUT'])
+@require_page_access('perso')
+def api_modifier_mes_infos():
+    # Récupérer le personnel associé à l'utilisateur connecté
+    personnel = Personnel.query.filter_by(user_id=current_user.id).first()
+    if not personnel:
+        return jsonify({'error': 'Profil personnel non trouvé'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Données JSON manquantes'}), 400
+    
+    if 'email' in data:
+        personnel.email = data['email']
+    if 'telephone' in data:
+        personnel.telephone = data['telephone']
+    
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Informations modifiées avec succès'})
+
+# API - Admin: Importer la signature d'un personnel
+@app.route('/api/perso/admin/personnel/<int:personnel_id>/signature', methods=['POST'])
+@require_page_access('perso')
+def api_admin_upload_signature_personnel(personnel_id):
+    # Vérifier que l'utilisateur est admin
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Accès non autorisé. Admin seulement.'}), 403
+    
+    personnel = Personnel.query.get_or_404(personnel_id)
+    if not personnel.user_id:
+        return jsonify({'error': 'Ce personnel n\'a pas d\'utilisateur associé'}), 400
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'Aucun fichier fourni'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Aucun fichier sélectionné'}), 400
+    
+    # Vérifier que c'est une image
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+        return jsonify({'error': 'Le fichier doit être une image'}), 400
+    
+    try:
+        # Sauvegarder le fichier
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"signature_{personnel.user_id}_{timestamp}_{filename}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'signatures')
+        os.makedirs(filepath, exist_ok=True)
+        full_path = os.path.join(filepath, filename)
+        file.save(full_path)
+        
+        # Enregistrer ou mettre à jour la signature
+        signature = ManagerSignature.query.filter_by(user_id=personnel.user_id).first()
+        if signature:
+            # Supprimer l'ancienne signature
+            if os.path.exists(signature.signature_path):
+                os.remove(signature.signature_path)
+            signature.signature_path = full_path
+            signature.updated_at = datetime.utcnow()
+        else:
+            signature = ManagerSignature(
+                user_id=personnel.user_id,
+                signature_path=full_path
+            )
+            db.session.add(signature)
+        
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Signature importée avec succès pour {personnel.nom} {personnel.prenom}'})
+    except Exception as e:
+        print(f"Erreur lors de l'upload de la signature: {e}")
+        return jsonify({'error': f'Erreur lors de l\'upload: {str(e)}'}), 500
+
 # API - Télécharger un PDF de congé
 @app.route('/api/perso/conges/<int:demande_id>/pdf/<int:pdf_id>')
 @require_page_access('perso')
