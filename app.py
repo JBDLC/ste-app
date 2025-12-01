@@ -3099,27 +3099,30 @@ def api_regenerer_pdf_conge(demande_id):
             manager_original_id = current_user.id
             print(f"[Régénération PDF] Aucun manager original trouvé, utilisation de current_user.id={manager_original_id}")
         
-        # Supprimer les anciens PDFs (LeaveRequestDocument et PersonnelDocument)
+        # Supprimer TOUS les anciens PersonnelDocument liés à cette demande de congé
+        # (même type, même personnel, même période de dates) pour éviter les doublons
+        description_pattern = f"Formulaire d'autorisation d'absence du {demande.date_debut.strftime('%d/%m/%Y')} au {demande.date_fin.strftime('%d/%m/%Y')}"
+        anciens_personnel_docs = PersonnelDocument.query.filter_by(
+            personnel_id=demande.personnel_id,
+            type_document='autorisation_absence'
+        ).filter(
+            PersonnelDocument.description.like(f"%{demande.date_debut.strftime('%d/%m/%Y')}%{demande.date_fin.strftime('%d/%m/%Y')}%")
+        ).all()
+        
+        for ancien_doc in anciens_personnel_docs:
+            # Supprimer le fichier physique s'il existe
+            if os.path.exists(ancien_doc.chemin_fichier):
+                try:
+                    os.remove(ancien_doc.chemin_fichier)
+                except Exception as e:
+                    print(f"Erreur lors de la suppression du fichier {ancien_doc.chemin_fichier}: {e}")
+            
+            # Supprimer le document PersonnelDocument
+            db.session.delete(ancien_doc)
+        
+        # Supprimer les anciens PDFs (LeaveRequestDocument)
         for doc in documents:
-            # Chercher le document PersonnelDocument qui a le même chemin_fichier
-            personnel_doc = PersonnelDocument.query.filter_by(
-                personnel_id=demande.personnel_id,
-                chemin_fichier=doc.chemin_fichier,
-                type_document='autorisation_absence'
-            ).first()
-            
-            if personnel_doc:
-                # Supprimer le fichier physique s'il existe
-                if os.path.exists(personnel_doc.chemin_fichier):
-                    try:
-                        os.remove(personnel_doc.chemin_fichier)
-                    except Exception as e:
-                        print(f"Erreur lors de la suppression du fichier {personnel_doc.chemin_fichier}: {e}")
-                
-                # Supprimer le document PersonnelDocument
-                db.session.delete(personnel_doc)
-            
-            # Supprimer aussi le fichier physique du LeaveRequestDocument
+            # Supprimer le fichier physique du LeaveRequestDocument
             if os.path.exists(doc.chemin_fichier):
                 try:
                     os.remove(doc.chemin_fichier)
