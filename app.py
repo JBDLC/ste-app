@@ -2881,15 +2881,25 @@ def generer_pdf_conge(demande):
         date_debut_str = demande.date_debut.strftime('%d/%m/%Y')
         date_fin_str = demande.date_fin.strftime('%d/%m/%Y')
         
-        # Nb de jours : X=12cm, Y=8cm + 2mm = 8.2cm (depuis le haut)
+        # Position des dates et du nombre de jours :
+        # - Congé payé et congé sans solde : position actuelle
+        # - RTT : décalage de 4 cm vers la gauche pour "Du", "Au" et le nombre de jours
         overlay.setFont("Helvetica", 11)
-        overlay.drawString(12*cm, (height_cm - 8.2)*cm, str(nombre_jours))
+        if demande.type_conge == 'rtt':
+            nb_jours_x = 8*cm    # 12cm - 4cm
+            dates_x = 7*cm       # 11cm - 4cm
+        else:
+            nb_jours_x = 12*cm
+            dates_x = 11*cm
         
-        # Du : X=11cm, Y=8.9cm + 2mm = 9.1cm (depuis le haut)
-        overlay.drawString(11*cm, (height_cm - 9.1)*cm, date_debut_str)
+        # Nb de jours : Y=8cm + 2mm = 8.2cm (depuis le haut)
+        overlay.drawString(nb_jours_x, (height_cm - 8.2)*cm, str(nombre_jours))
         
-        # Au : X=11cm, Y=9.4cm + 2mm + 2mm = 9.8cm (depuis le haut)
-        overlay.drawString(11*cm, (height_cm - 9.8)*cm, date_fin_str)
+        # Du : Y=8.9cm + 2mm = 9.1cm (depuis le haut)
+        overlay.drawString(dates_x, (height_cm - 9.1)*cm, date_debut_str)
+        
+        # Au : Y=9.4cm + 2mm + 2mm = 9.8cm (depuis le haut)
+        overlay.drawString(dates_x, (height_cm - 9.8)*cm, date_fin_str)
         
         # Commentaire (si présent, dans la zone commentaire)
         if demande.commentaire:
@@ -3314,8 +3324,13 @@ def api_download_pdf_conge(demande_id, pdf_id):
     
     pdf_doc = LeaveRequestDocument.query.filter_by(id=pdf_id, leave_request_id=demande_id).first_or_404()
     
-    if os.path.exists(pdf_doc.chemin_fichier):
-        return send_file(pdf_doc.chemin_fichier, as_attachment=True, download_name=pdf_doc.nom_fichier)
+    # Supporter les anciens chemins relatifs (ex: "uploads/...") et les chemins absolus
+    pdf_path = pdf_doc.chemin_fichier
+    if not os.path.isabs(pdf_path):
+        pdf_path = os.path.join(app.root_path, pdf_path)
+    
+    if os.path.exists(pdf_path):
+        return send_file(pdf_path, as_attachment=True, download_name=pdf_doc.nom_fichier)
     else:
         return jsonify({'error': 'Fichier introuvable'}), 404
 
@@ -3403,8 +3418,13 @@ def api_download_document(document_id):
     if not is_manager and document.personnel.user_id != current_user.id:
         return jsonify({'error': 'Accès non autorisé'}), 403
     
-    if os.path.exists(document.chemin_fichier):
-        return send_file(document.chemin_fichier, as_attachment=True, download_name=document.nom_fichier)
+    # Supporter les anciens chemins relatifs (ex: "uploads/...") et les chemins absolus
+    file_path = document.chemin_fichier
+    if not os.path.isabs(file_path):
+        file_path = os.path.join(app.root_path, file_path)
+    
+    if os.path.exists(file_path):
+        return send_file(file_path, as_attachment=True, download_name=document.nom_fichier)
     else:
         return jsonify({'error': 'Fichier introuvable'}), 404
 
@@ -3417,8 +3437,12 @@ def api_supprimer_document(document_id):
         return jsonify({'error': 'Accès non autorisé'}), 403
     
     document = PersonnelDocument.query.get_or_404(document_id)
-    if os.path.exists(document.chemin_fichier):
-        os.remove(document.chemin_fichier)
+    # Supporter les anciens chemins relatifs et absolus
+    file_path = document.chemin_fichier
+    if not os.path.isabs(file_path):
+        file_path = os.path.join(app.root_path, file_path)
+    if os.path.exists(file_path):
+        os.remove(file_path)
     db.session.delete(document)
     db.session.commit()
     return jsonify({'success': True})
