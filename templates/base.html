@@ -265,7 +265,14 @@
           <span style="background: #fff; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(32,70,107,0.08);">
             <img src="{{ url_for('static', filename='favicon.png') }}" alt="Flot" style="width: 26px; height: 26px; object-fit: contain;">
           </span>
-          <span class="ms-2 fw-bold" style="letter-spacing:0.03em;">Flot</span>
+          <span class="ms-2 d-flex flex-column">
+            <span class="fw-bold" style="letter-spacing:0.03em;">Flot</span>
+            {% if current_user.is_authenticated %}
+              <small class="text-white-50" style="font-size: 0.8rem;">
+                Bienvenue {{ current_user.personnel.prenom if current_user.personnel else current_user.username }}
+              </small>
+            {% endif %}
+          </span>
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar" aria-controls="offcanvasNavbar">
           <span class="navbar-toggler-icon"></span>
@@ -314,7 +321,14 @@
                 <div class="logo-bandeau">
                     <img src="{{ url_for('static', filename='favicon.png') }}" alt="Flot">
                 </div>
-                <span class="logo-text">Flot</span>
+                <div class="d-flex flex-column">
+                    <span class="logo-text">Flot</span>
+                    {% if current_user.is_authenticated %}
+                        <small class="text-white-50" style="font-size: 0.85rem;">
+                            Bienvenue {{ current_user.personnel.prenom if current_user.personnel else current_user.username }}
+                        </small>
+                    {% endif %}
+                </div>
             </div>
             <ul class="nav">
                 {% set user = current_user %}
