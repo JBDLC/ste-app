@@ -3061,6 +3061,107 @@ def api_modifier_conge(demande_id):
     db.session.commit()
     return jsonify({'success': True})
 
+# API - Régénérer le PDF d'un congé (admin/manager seulement)
+@app.route('/api/perso/conges/<int:demande_id>/regenerer-pdf', methods=['POST'])
+@require_page_access('perso')
+def api_regenerer_pdf_conge(demande_id):
+    is_manager = current_user.is_manager or current_user.role == 'admin'
+    if not is_manager:
+        return jsonify({'error': 'Accès non autorisé'}), 403
+    
+    demande = LeaveRequest.query.get_or_404(demande_id)
+    
+    # Vérifier que le congé est accepté
+    if demande.statut != 'accepte':
+        return jsonify({'error': 'Le congé doit être accepté pour régénérer le PDF'}), 400
+    
+    try:
+        # Récupérer tous les documents associés au congé
+        documents = LeaveRequestDocument.query.filter_by(leave_request_id=demande_id).all()
+        
+        # Supprimer les anciens PDFs (LeaveRequestDocument et PersonnelDocument)
+        for doc in documents:
+            # Chercher le document PersonnelDocument qui a le même chemin_fichier
+            personnel_doc = PersonnelDocument.query.filter_by(
+                personnel_id=demande.personnel_id,
+                chemin_fichier=doc.chemin_fichier,
+                type_document='autorisation_absence'
+            ).first()
+            
+            if personnel_doc:
+                # Supprimer le fichier physique s'il existe
+                if os.path.exists(personnel_doc.chemin_fichier):
+                    try:
+                        os.remove(personnel_doc.chemin_fichier)
+                    except Exception as e:
+                        print(f"Erreur lors de la suppression du fichier {personnel_doc.chemin_fichier}: {e}")
+                
+                # Supprimer le document PersonnelDocument
+                db.session.delete(personnel_doc)
+            
+            # Supprimer aussi le fichier physique du LeaveRequestDocument
+            if os.path.exists(doc.chemin_fichier):
+                try:
+                    os.remove(doc.chemin_fichier)
+                except Exception as e:
+                    print(f"Erreur lors de la suppression du fichier {doc.chemin_fichier}: {e}")
+            
+            # Supprimer le LeaveRequestDocument
+            db.session.delete(doc)
+        
+        # Régénérer le PDF
+        pdf_buffer = generer_pdf_conge(demande)
+        if pdf_buffer:
+            try:
+                # Créer le dossier pour les PDFs de congé s'il n'existe pas
+                pdf_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'conges', str(demande_id))
+                os.makedirs(pdf_dir, exist_ok=True)
+                
+                # Nom du fichier PDF
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                pdf_filename = f"formulaire_conge_{demande.id}_{timestamp}.pdf"
+                pdf_path = os.path.join(pdf_dir, pdf_filename)
+                
+                # Sauvegarder le PDF
+                with open(pdf_path, 'wb') as f:
+                    f.write(pdf_buffer.read())
+                
+                # Enregistrer le document en base
+                pdf_doc = LeaveRequestDocument(
+                    leave_request_id=demande.id,
+                    nom_fichier=f"Formulaire d'autorisation d'absence - {demande.personnel.nom} {demande.personnel.prenom}.pdf",
+                    chemin_fichier=pdf_path
+                )
+                db.session.add(pdf_doc)
+                
+                # Ajouter le document à la liste de documents du demandeur
+                personnel_doc = PersonnelDocument(
+                    personnel_id=demande.personnel_id,
+                    nom_fichier=f"Formulaire d'autorisation d'absence - {demande.personnel.nom} {demande.personnel.prenom}.pdf",
+                    chemin_fichier=pdf_path,
+                    type_document='autorisation_absence',
+                    description=f"Formulaire d'autorisation d'absence du {demande.date_debut.strftime('%d/%m/%Y')} au {demande.date_fin.strftime('%d/%m/%Y')}",
+                    uploaded_by=current_user.id
+                )
+                db.session.add(personnel_doc)
+                
+                db.session.commit()
+                return jsonify({'success': True, 'message': 'PDF régénéré avec succès'})
+            except Exception as e:
+                db.session.rollback()
+                print(f"Erreur lors de la sauvegarde du PDF: {e}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({'error': f'Erreur lors de la sauvegarde du PDF: {str(e)}'}), 500
+        else:
+            return jsonify({'error': 'Échec de la génération du PDF'}), 500
+    except Exception as e:
+        db.session.rollback()
+        print(f"Erreur lors de la régénération du PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Erreur lors de la régénération: {str(e)}'}), 500
+
 # API - Supprimer un congé (manager seulement)
 @app.route('/api/perso/conges/<int:demande_id>', methods=['DELETE'])
 @require_page_access('perso')

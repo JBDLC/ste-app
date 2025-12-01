@@ -1507,7 +1507,10 @@ function loadConges() {
                             <button class="btn btn-sm btn-info me-1" onclick="loadCongesPDFs(${d.id})" title="Voir les PDFs">
                                 <i class="fas fa-file-pdf"></i>
                             </button>
-                            <a href="${generateMailtoLink(d)}" class="btn btn-sm btn-primary me-1" title="Envoyer par email">
+                            <button class="btn btn-sm btn-warning me-1" onclick="regenererPDF(${d.id})" title="Régénérer le PDF">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                            <a href="${generateMailtoLink(d)}" class="btn btn-sm btn-primary me-1" title="Envoyer par email" style="width: auto; min-width: 38px;">
                                 <i class="fas fa-envelope"></i>
                             </a>
                         ` : ''}
@@ -1541,6 +1544,30 @@ function updateCongeStatut(id, statut) {
                 alert('Congé accepté. Le PDF a été généré automatiquement.');
             }
         }
+    });
+}
+
+function regenererPDF(congeId) {
+    if (!confirm('Êtes-vous sûr de vouloir régénérer le PDF de ce congé ? Les anciens PDFs seront supprimés.')) {
+        return;
+    }
+    
+    fetch(`/api/perso/conges/${congeId}/regenerer-pdf`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('Erreur: ' + data.error);
+        } else {
+            alert('PDF régénéré avec succès !');
+            loadConges();
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors de la régénération du PDF');
     });
 }
 
