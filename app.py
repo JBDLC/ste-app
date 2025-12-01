@@ -2780,8 +2780,13 @@ def calculer_jours_travailles(personnel_id, date_debut, date_fin, jours_semaine=
     return nombre_jours
 
 # Fonction pour générer le PDF de congé en utilisant le template vierge
-def generer_pdf_conge(demande):
-    """Génère un PDF de formulaire d'autorisation d'absence en remplissant le template vierge"""
+def generer_pdf_conge(demande, manager_user_id=None):
+    """Génère un PDF de formulaire d'autorisation d'absence en remplissant le template vierge
+    
+    Args:
+        demande: L'objet LeaveRequest
+        manager_user_id: ID de l'utilisateur manager qui signe (optionnel, utilise current_user.id par défaut)
+    """
     try:
         # Vérifier si le template existe (essayer plusieurs chemins et noms possibles)
         template_paths = [
@@ -2901,14 +2906,6 @@ def generer_pdf_conge(demande):
         # Au : Y=9.4cm + 2mm + 2mm = 9.8cm (depuis le haut)
         overlay.drawString(dates_x, (height_cm - 9.8)*cm, date_fin_str)
         
-        # Commentaire (si présent, dans la zone commentaire)
-        if demande.commentaire:
-            overlay.setFont("Helvetica", 9)
-            commentaire_y = height - 15.5*cm
-            commentaire_lines = demande.commentaire.split('\n')
-            for i, line in enumerate(commentaire_lines[:5]):  # Max 5 lignes
-                overlay.drawString(2*cm, commentaire_y - (i * 0.5*cm), line[:100])
-        
         # Date signature de l'intéressé : X=6.5cm, Y=19.6cm + 1mm = 19.7cm (depuis le haut) - date de demande
         date_signature_interesse = demande.created_at.strftime('%d/%m/%Y') if demande.created_at else datetime.now().strftime('%d/%m/%Y')
         overlay.setFont("Helvetica", 10)
@@ -2967,8 +2964,10 @@ def generer_pdf_conge(demande):
             print(f"[PDF] ⚠️ personnel.user_id est None pour personnel_id={personnel.id}")
         
         # Ajouter la signature du manager (qui accepte) : X=12cm
-        print(f"[PDF] Manager qui accepte: current_user.id={current_user.id}, current_user.username={current_user.username}")
-        ajouter_signature(current_user.id, 12, "manager (qui accepte)")
+        # Utiliser manager_user_id si fourni (pour la régénération), sinon current_user.id
+        manager_id = manager_user_id if manager_user_id is not None else current_user.id
+        print(f"[PDF] Manager qui accepte: manager_id={manager_id}, current_user.id={current_user.id}, current_user.username={current_user.username}")
+        ajouter_signature(manager_id, 12, "manager (qui accepte)")
         
         # Finaliser l'overlay
         overlay.save()
@@ -3079,6 +3078,27 @@ def api_regenerer_pdf_conge(demande_id):
         # Récupérer tous les documents associés au congé
         documents = LeaveRequestDocument.query.filter_by(leave_request_id=demande_id).all()
         
+        # Trouver l'ID du manager qui a accepté initialement (avant de supprimer les documents)
+        manager_original_id = None
+        for doc in documents:
+            # Chercher le document PersonnelDocument qui a le même chemin_fichier
+            personnel_doc = PersonnelDocument.query.filter_by(
+                personnel_id=demande.personnel_id,
+                chemin_fichier=doc.chemin_fichier,
+                type_document='autorisation_absence'
+            ).first()
+            
+            if personnel_doc and personnel_doc.uploaded_by:
+                # Récupérer l'ID du manager qui a créé le document initialement
+                manager_original_id = personnel_doc.uploaded_by
+                print(f"[Régénération PDF] Manager original trouvé: user_id={manager_original_id}")
+                break
+        
+        # Si aucun manager original trouvé, utiliser current_user.id
+        if manager_original_id is None:
+            manager_original_id = current_user.id
+            print(f"[Régénération PDF] Aucun manager original trouvé, utilisation de current_user.id={manager_original_id}")
+        
         # Supprimer les anciens PDFs (LeaveRequestDocument et PersonnelDocument)
         for doc in documents:
             # Chercher le document PersonnelDocument qui a le même chemin_fichier
@@ -3109,8 +3129,8 @@ def api_regenerer_pdf_conge(demande_id):
             # Supprimer le LeaveRequestDocument
             db.session.delete(doc)
         
-        # Régénérer le PDF
-        pdf_buffer = generer_pdf_conge(demande)
+        # Régénérer le PDF avec la signature du manager original
+        pdf_buffer = generer_pdf_conge(demande, manager_user_id=manager_original_id)
         if pdf_buffer:
             try:
                 # Créer le dossier pour les PDFs de congé s'il n'existe pas
@@ -3135,13 +3155,14 @@ def api_regenerer_pdf_conge(demande_id):
                 db.session.add(pdf_doc)
                 
                 # Ajouter le document à la liste de documents du demandeur
+                # Utiliser le manager original qui a accepté, pas celui qui régénère
                 personnel_doc = PersonnelDocument(
                     personnel_id=demande.personnel_id,
                     nom_fichier=f"Formulaire d'autorisation d'absence - {demande.personnel.nom} {demande.personnel.prenom}.pdf",
                     chemin_fichier=pdf_path,
                     type_document='autorisation_absence',
                     description=f"Formulaire d'autorisation d'absence du {demande.date_debut.strftime('%d/%m/%Y')} au {demande.date_fin.strftime('%d/%m/%Y')}",
-                    uploaded_by=current_user.id
+                    uploaded_by=manager_original_id
                 )
                 db.session.add(personnel_doc)
                 
