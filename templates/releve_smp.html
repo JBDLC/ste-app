@@ -52,10 +52,15 @@ let valeursVeille = {};
 let relevesExistants = {};
 let typeReleveMap = {};
 
+function estReleveCab(nom) {
+    return String(nom || '').toUpperCase().includes('CAB');
+}
+
 function chargerTypesReleve() {
     fetch('/api/types_releve/1')
         .then(r => r.json())
         .then(data => {
+            data = data.filter(tr => !estReleveCab(tr.nom));
             typeReleveMap = {};
             data.forEach(tr => {
                 typeReleveMap[tr.nom] = tr.id;
@@ -158,18 +163,19 @@ function chargerDonneesDate() {
     fetch(`/api/verifier_existence/1?date=${date}`)
         .then(response => response.json())
         .then(data => {
-            relevesExistants = data.releves_existants.reduce((acc, r) => {
+            const visibles = (data.releves_existants || []).filter(r => !estReleveCab(r.nom));
+            relevesExistants = visibles.reduce((acc, r) => {
                 acc[r.nom] = r;
                 return acc;
             }, {});
             
-            if (data.existe) {
+            if (visibles.length > 0) {
                 // Pré-remplir les champs avec les valeurs existantes
                 Object.entries(relevesExistants).forEach(([nom, r]) => {
                     const input = document.querySelector(`input[data-nom="${nom}"]`);
                     if (input) input.value = r.valeur;
                 });
-                afficherAlerteExistant(data.releves_existants);
+                afficherAlerteExistant(visibles);
             } else {
                 // Vider tous les champs valeur du jour
                 document.querySelectorAll('.valeur-jour').forEach(input => {

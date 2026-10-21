@@ -50,10 +50,15 @@ let valeursVeille = {};
 let relevesExistants = {};
 let typeReleveMap = {};
 
+function estReleveCab(nom) {
+    return String(nom || '').toUpperCase().includes('CAB');
+}
+
 function chargerTypesReleve() {
     fetch('/api/types_releve/2')
         .then(r => r.json())
         .then(data => {
+            data = data.filter(tr => !estReleveCab(tr.nom));
             typeReleveMap = {};
             data.forEach(tr => {
                 typeReleveMap[tr.nom] = tr.id;
@@ -71,23 +76,29 @@ function genererTableauReleves(typesReleve) {
     typesReleve.forEach(tr => {
         const row = document.createElement('tr');
         
-        // Déterminer si c'est hebdomadaire
-        const isHebdomadaire = tr.frequence === 'hebdomadaire';
-        const hebdomadaireClass = isHebdomadaire ? 'hebdomadaire' : '';
+        const lundiUniquement = tr.frequence === 'hebdomadaire' && tr.jour_specifique === 'lundi';
+        const semainePrecedente = tr.jour_specifique === 'semaine';
+        const identifiant = tr.nom.replace(/ /g, '');
+        let precision = '';
+        if (lundiUniquement) {
+            precision = `<br><small class="text-muted" id="info-${identifiant}">Saisissable uniquement le lundi</small>`;
+        } else if (semainePrecedente) {
+            precision = `<br><small class="text-muted">Valeur veille : semaine précédente</small>`;
+        }
         
         row.innerHTML = `
             <td>
                 ${tr.nom}
-                ${isHebdomadaire ? `<br><small class="text-muted" id="info-${tr.nom.replace(/ /g, '')}">Saisissable uniquement le lundi</small>` : ''}
+                ${precision}
             </td>
             <td>
                 <input type="number" step="0.01" 
-                       class="form-control valeur-jour ${hebdomadaireClass}" 
+                       class="form-control valeur-jour ${lundiUniquement ? 'hebdomadaire' : ''}" 
                        name="${tr.nom}" 
                        data-nom="${tr.nom}" 
                        data-type="${tr.type_mesure}"
                        data-type-id="${tr.id}"
-                       ${isHebdomadaire ? `id="${tr.nom.replace(/ /g, '')}"` : ''}>
+                       ${lundiUniquement ? `id="${identifiant}"` : ''}>
             </td>
             <td class="text-center"><small class="text-muted">${tr.unite}</small></td>
             <td><span class="valeur-veille text-muted" data-nom="${tr.nom}">-</span></td>
@@ -101,6 +112,7 @@ function genererTableauReleves(typesReleve) {
     document.querySelectorAll('.valeur-jour').forEach(input => {
         input.addEventListener('input', calculerDifferences);
     });
+    chargerDonneesDate();
 }
 
 function updateDateLettres() {
@@ -157,17 +169,18 @@ function chargerDonneesDate() {
     fetch(`/api/verifier_existence/2?date=${date}`)
         .then(response => response.json())
         .then(data => {
-            relevesExistants = data.releves_existants.reduce((acc, r) => {
+            const visibles = (data.releves_existants || []).filter(r => !estReleveCab(r.nom));
+            relevesExistants = visibles.reduce((acc, r) => {
                 acc[r.nom] = r;
                 return acc;
             }, {});
             
-            if (data.existe) {
+            if (visibles.length > 0) {
                 Object.entries(relevesExistants).forEach(([nom, r]) => {
                     const input = document.querySelector(`input[data-nom="${nom}"]`);
                     if (input) input.value = r.valeur;
                 });
-                afficherAlerteExistant(data.releves_existants);
+                afficherAlerteExistant(visibles);
             } else {
                 document.querySelectorAll('input[data-nom]').forEach(input => {
                     input.value = '';
@@ -193,32 +206,36 @@ function afficherValeursVeille() {
     });
 }
 
+function elementParNom(selector, nom) {
+    return Array.from(document.querySelectorAll(selector)).find(el => el.dataset.nom === nom);
+}
+
 function calculerDifferences() {
     document.querySelectorAll('input[data-nom]').forEach(input => {
         const nom = input.dataset.nom;
-        const valeurJour = parseFloat(input.value) || 0;
-        const valeurVeille = valeursVeille[nom] || 0;
-        const type = input.dataset.type;
-        
-        const spanDiff = document.querySelector(`.difference[data-nom="${nom}"]`);
-        if (spanDiff) {
-            if (type === 'totalisateur') {
-                // Pour les totalisateurs, calculer la différence
-                const difference = valeurJour - valeurVeille;
-                spanDiff.textContent = difference.toFixed(2);
-                spanDiff.classList.remove('text-muted');
-                if (difference < 0) {
-                    spanDiff.classList.add('text-danger');
-                    spanDiff.classList.remove('text-success');
-                } else {
-                    spanDiff.classList.add('text-success');
-                    spanDiff.classList.remove('text-danger');
-                }
-            } else {
-                // Pour les basiques, afficher la valeur du jour
-                spanDiff.textContent = valeurJour.toFixed(2);
-                spanDiff.classList.remove('text-muted', 'text-danger', 'text-success');
-            }
+        const spanDiff = elementParNom('.difference', nom);
+        if (!spanDiff) return;
+
+        const brut = input.value.trim();
+        const valeurJour = parseFloat(brut);
+        if (brut === '' || Number.isNaN(valeurJour)) {
+            spanDiff.textContent = '-';
+            spanDiff.classList.add('text-muted');
+            spanDiff.classList.remove('text-success', 'text-danger');
+            return;
+        }
+
+        const veilleBrute = valeursVeille[nom];
+        const valeurVeille = (veilleBrute === undefined || veilleBrute === null) ? 0 : Number(veilleBrute);
+        const difference = valeurJour - valeurVeille;
+        spanDiff.textContent = difference.toFixed(2);
+        spanDiff.classList.remove('text-muted');
+        if (difference < 0) {
+            spanDiff.classList.add('text-danger');
+            spanDiff.classList.remove('text-success');
+        } else {
+            spanDiff.classList.add('text-success');
+            spanDiff.classList.remove('text-danger');
         }
     });
 }

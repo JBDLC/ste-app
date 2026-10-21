@@ -1200,12 +1200,17 @@ def api_veille(site_id):
     # Récupérer tous les types de relevé pour ce site
     types_releve = TypeReleve.query.filter_by(site_id=site_id).all()
     
-    # Récupérer les relevés de la veille
+    # La veille est la journée précédente, sauf pour les compteurs
+    # hebdomadaires (semaine) : on prend le relevé d'il y a 7 jours.
     releves_veille = {}
     for tr in types_releve:
+        if tr.frequence == 'hebdomadaire' and tr.jour_specifique == 'semaine':
+            date_reference = date_releve - timedelta(days=7)
+        else:
+            date_reference = date_veille
         releve = Releve.query.filter_by(
             type_releve_id=tr.id,
-            date=date_veille
+            date=date_reference
         ).first()
         if releve:
             releves_veille[tr.nom] = releve.valeur
@@ -2155,7 +2160,11 @@ def init_db():
                 ('MES sortie', 'basique', 'mg/L', 'quotidien'),
                 ('Coagulant', 'basique', 'L', 'hebdomadaire', 'lundi'),
                 ('Floculant', 'basique', 'kg', 'quotidien'),
-                ('CO2', 'basique', '%', 'quotidien')
+                ('CO2', 'basique', '%', 'quotidien'),
+                ('TAR1 Appoint', 'totalisateur', 'm³', 'hebdomadaire', 'semaine'),
+                ('TAR1 Purge', 'totalisateur', 'm³', 'hebdomadaire', 'semaine'),
+                ('TAR2 Appoint', 'totalisateur', 'm³', 'hebdomadaire', 'semaine'),
+                ('TAR2 Purge', 'totalisateur', 'm³', 'hebdomadaire', 'semaine')
             ]
             
             for nom, type_mesure, unite, frequence, *args in types_lpz:
@@ -2243,6 +2252,20 @@ def init_db():
         
         db.session.commit()
         print("✅ Mise à jour des unités terminée")
+
+        lpz = Site.query.filter_by(nom='LPZ').first()
+        if lpz:
+            for nom in ('TAR1 Appoint', 'TAR1 Purge', 'TAR2 Appoint', 'TAR2 Purge'):
+                if not TypeReleve.query.filter_by(nom=nom, site_id=lpz.id).first():
+                    db.session.add(TypeReleve(
+                        nom=nom,
+                        site_id=lpz.id,
+                        type_mesure='totalisateur',
+                        unite='m³',
+                        frequence='hebdomadaire',
+                        jour_specifique='semaine'
+                    ))
+            db.session.commit()
         print("✅ Base de données initialisée avec succès!")
 
 # Liste des pages gérables pour les droits
