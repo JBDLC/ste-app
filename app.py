@@ -1323,12 +1323,80 @@ def api_types_releve(site_id):
     ]
     return jsonify(result)
 
+def bornes_graphique(type_releve):
+    """Limites de la valeur tracée. Hors limites, le point est un écart de saisie.
+
+    Pour un totalisateur, la valeur tracée est le débit entre deux relevés.
+    """
+    nom = (type_releve.nom or '').lower()
+    if 'ph' in nom:
+        return 0.0, 14.0
+    if 'temp' in nom:
+        return -5.0, 45.0
+    if 'conduct' in nom:
+        return 0.0, 20000.0
+    if nom.startswith('mes'):
+        return 0.0, 20000.0
+    if nom == 'co2':
+        return 0.0, 100.0
+    if 'boue' in nom:
+        return 0.0, 40.0
+    if 'coagulant' in nom:
+        return 0.0, 20000.0
+    if 'floculant' in nom:
+        return 0.0, 2000.0
+    if type_releve.type_mesure == 'totalisateur':
+        if any(mot in nom for mot in ('eau potable', 'forage', 'eau de montagne', 'tar')):
+            return 0.0, 5000.0
+        return 0.0, 50000.0
+    return None, None
+
+
+def ecarter_valeurs_aberrantes(type_releve, valeurs):
+    """Retire du graphique les points hors limites. Ne modifie pas les relevés."""
+    bas, haut = bornes_graphique(type_releve)
+    gardees = []
+    ecartees = []
+    for point in valeurs:
+        valeur = point.get('valeur')
+        if valeur is None or (bas is not None and (valeur < bas or valeur > haut)):
+            ecartees.append(point)
+        else:
+            gardees.append(point)
+
+    if type_releve.type_mesure == 'totalisateur' and len(gardees) >= 4:
+        nums = sorted(p['valeur'] for p in gardees)
+        mediane = nums[len(nums) // 2]
+        if mediane > 0:
+            seuil = mediane * 10
+            encore = []
+            for point in gardees:
+                if point['valeur'] > seuil:
+                    ecartees.append(point)
+                else:
+                    encore.append(point)
+            gardees = encore
+    return gardees, ecartees
+
+
 @app.route('/api/indicateurs_donnee/<int:type_releve_id>')
 @login_required
 def api_indicateurs_donnee(type_releve_id):
     jours = request.args.get('jours', 30, type=int)
     date_debut = datetime.now().date() - timedelta(days=jours)
     type_releve = TypeReleve.query.get_or_404(type_releve_id)
+
+    def reponse(valeurs):
+        ecartees = []
+        if request.args.get('gommer') == '1':
+            valeurs, ecartees = ecarter_valeurs_aberrantes(type_releve, valeurs)
+        return jsonify([{
+            'nom': type_releve.nom,
+            'unite': type_releve.unite,
+            'valeurs': valeurs,
+            'ecartees': ecartees
+        }])
+
     try:
         if type_releve.type_mesure == 'totalisateur':
             releves = Releve.query.filter_by(type_releve_id=type_releve_id).filter(Releve.date >= date_debut).order_by(Releve.date).all()
@@ -1341,11 +1409,7 @@ def api_indicateurs_donnee(type_releve_id):
                         'valeur': difference
                     })
             print(f"[API indicateurs_donnee] type={type_releve.nom} valeurs={valeurs}")
-            return jsonify([{
-                'nom': type_releve.nom,
-                'unite': type_releve.unite,
-                'valeurs': valeurs
-            }])
+            return reponse(valeurs)
         elif type_releve.nom == 'Eau potable':
             # Traitement spécial pour l'eau potable (hebdomadaire avec calcul de différence)
             releves = Releve.query.filter_by(type_releve_id=type_releve_id).filter(Releve.date >= date_debut).order_by(Releve.date).all()
@@ -1361,11 +1425,7 @@ def api_indicateurs_donnee(type_releve_id):
                         'valeur': difference
                     })
             print(f"[API indicateurs_donnee] Eau potable - valeurs={valeurs}")
-            return jsonify([{
-                'nom': type_releve.nom,
-                'unite': type_releve.unite,
-                'valeurs': valeurs
-            }])
+            return reponse(valeurs)
         elif type_releve.nom == 'Coagulant':
             # Traitement spécial pour le coagulant (hebdomadaire sans calcul)
             releves = Releve.query.filter_by(type_releve_id=type_releve_id).filter(Releve.date >= date_debut).order_by(Releve.date).all()
@@ -1379,11 +1439,7 @@ def api_indicateurs_donnee(type_releve_id):
                     'valeur': releve.valeur
                 })
             print(f"[API indicateurs_donnee] Coagulant - valeurs={valeurs}")
-            return jsonify([{
-                'nom': type_releve.nom,
-                'unite': type_releve.unite,
-                'valeurs': valeurs
-            }])
+            return reponse(valeurs)
         else:
             releves = Releve.query.filter_by(type_releve_id=type_releve_id).filter(Releve.date >= date_debut).order_by(Releve.date).all()
             valeurs = [
@@ -1391,11 +1447,7 @@ def api_indicateurs_donnee(type_releve_id):
                 for r in releves
             ]
             print(f"[API indicateurs_donnee] type={type_releve.nom} valeurs={valeurs}")
-            return jsonify([{
-                'nom': type_releve.nom,
-                'unite': type_releve.unite,
-                'valeurs': valeurs
-            }])
+            return reponse(valeurs)
     except Exception as e:
         print(f"[API indicateurs_donnee] ERREUR: {e}")
         return jsonify({'error': str(e)}), 500

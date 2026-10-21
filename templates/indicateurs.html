@@ -96,6 +96,11 @@
                             </button>
                         </div>
                     </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="gommerAberrantes" checked onchange="chargerGraphique()">
+                        <label class="form-check-label" for="gommerAberrantes">Ignorer les saisies aberrantes sur le graphique</label>
+                    </div>
+                    <p class="text-muted small mb-0 mt-1" id="gommerDetail">Les relevés en base ne sont pas modifiés. Le graphique écarte les débits négatifs ou démesurés, et les mesures hors plage (pH, température, conductivité, etc.).</p>
                 </div>
             </div>
         </div>
@@ -190,7 +195,8 @@ function chargerGraphique() {
     document.getElementById('graphiqueContainer').innerHTML = '';
     
     // Charger les données
-    fetch(`/api/indicateurs_donnee/${currentDonnee}?jours=${currentPeriode}`)
+    const gommer = document.getElementById('gommerAberrantes').checked ? '1' : '0';
+    fetch(`/api/indicateurs_donnee/${currentDonnee}?jours=${currentPeriode}&gommer=${gommer}`)
         .then(response => response.json())
         .then(data => {
             document.getElementById('graphiqueLoader').style.display = 'none';
@@ -206,6 +212,19 @@ function chargerGraphique() {
             `;
             console.error('Erreur:', error);
         });
+}
+
+function afficherEcartees(serie) {
+    const detail = document.getElementById('gommerDetail');
+    const coche = document.getElementById('gommerAberrantes').checked;
+    const ecartees = (serie && serie.ecartees) || [];
+    if (!coche || ecartees.length === 0) {
+        detail.textContent = 'Les relevés en base ne sont pas modifiés. Le graphique écarte les débits négatifs ou démesurés, et les mesures hors plage (pH, température, conductivité, etc.).';
+        return;
+    }
+    const apercu = ecartees.slice(0, 8).map(point => point.date).join(', ');
+    const suite = ecartees.length > 8 ? '…' : '';
+    detail.textContent = `${ecartees.length} valeur(s) ignorée(s) sur le graphique : ${apercu}${suite}. Les relevés en base sont inchangés.`;
 }
 
 function afficherGraphique(data) {
@@ -226,6 +245,17 @@ function afficherGraphique(data) {
     const donneeNom = donneeSelect.options[donneeSelect.selectedIndex].text;
     
     document.getElementById('graphiqueTitre').textContent = `${donneeNom} - ${siteNom}`;
+    afficherEcartees(data[0]);
+
+    if (!data[0].valeurs || data[0].valeurs.length === 0) {
+        document.getElementById('graphiqueContainer').innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-chart-line fa-3x mb-3"></i>
+                <br>Aucune valeur affichable pour cette période
+            </div>
+        `;
+        return;
+    }
     
     // Créer les traces pour Plotly
     const traces = data.map(serie => {
