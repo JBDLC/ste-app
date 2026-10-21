@@ -48,10 +48,11 @@ if os.environ.get('DATABASE_URL'):
     if database_url and database_url.startswith('postgres://'):
         # Render utilise postgres:// mais SQLAlchemy attend postgresql://
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    if database_url and database_url.startswith('postgresql://'):
+        # SQLAlchemy 2.1 prend psycopg (v3) par défaut. Le projet installe psycopg2.
+        database_url = database_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    print(f"✅ Configuration PostgreSQL détectée: {database_url[:50] if database_url else 'None'}...")
-    print(f"   Type de base: PostgreSQL")
-    print(f"   URL complète: {database_url}")
+    print("Configuration PostgreSQL détectée")
     
 elif os.environ.get('RENDER'):
     # Sur Render sans DATABASE_URL, utiliser un chemin persistant pour SQLite (fallback uniquement)
