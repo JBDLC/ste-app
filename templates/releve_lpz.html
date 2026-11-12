@@ -54,6 +54,19 @@ function estReleveCab(nom) {
     return String(nom || '').toUpperCase().includes('CAB');
 }
 
+function echapperHtml(texte) {
+    return String(texte ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function champParNom(nom) {
+    return Array.from(document.querySelectorAll('input[data-nom]')).find(el => el.dataset.nom === nom);
+}
+
 function chargerTypesReleve() {
     fetch('/api/types_releve/2')
         .then(r => r.json())
@@ -78,7 +91,8 @@ function genererTableauReleves(typesReleve) {
         
         const lundiUniquement = tr.frequence === 'hebdomadaire' && tr.jour_specifique === 'lundi';
         const semainePrecedente = tr.jour_specifique === 'semaine';
-        const identifiant = tr.nom.replace(/ /g, '');
+        const identifiant = tr.nom.replace(/[^a-zA-Z0-9]/g, '');
+        const nomHtml = echapperHtml(tr.nom);
         let precision = '';
         if (lundiUniquement) {
             precision = `<br><small class="text-muted" id="info-${identifiant}">Saisissable uniquement le lundi</small>`;
@@ -88,21 +102,21 @@ function genererTableauReleves(typesReleve) {
         
         row.innerHTML = `
             <td>
-                ${tr.nom}
+                ${nomHtml}
                 ${precision}
             </td>
             <td>
                 <input type="number" step="0.01" 
                        class="form-control valeur-jour ${lundiUniquement ? 'hebdomadaire' : ''}" 
-                       name="${tr.nom}" 
-                       data-nom="${tr.nom}" 
-                       data-type="${tr.type_mesure}"
+                       name="${nomHtml}" 
+                       data-nom="${nomHtml}" 
+                       data-type="${echapperHtml(tr.type_mesure)}"
                        data-type-id="${tr.id}"
                        ${lundiUniquement ? `id="${identifiant}"` : ''}>
             </td>
-            <td class="text-center"><small class="text-muted">${tr.unite}</small></td>
-            <td><span class="valeur-veille text-muted" data-nom="${tr.nom}">-</span></td>
-            <td><span class="difference text-muted" data-nom="${tr.nom}">-</span></td>
+            <td class="text-center"><small class="text-muted">${echapperHtml(tr.unite)}</small></td>
+            <td><span class="valeur-veille text-muted" data-nom="${nomHtml}">-</span></td>
+            <td><span class="difference text-muted" data-nom="${nomHtml}">-</span></td>
         `;
         
         tbody.appendChild(row);
@@ -177,7 +191,7 @@ function chargerDonneesDate() {
             
             if (visibles.length > 0) {
                 Object.entries(relevesExistants).forEach(([nom, r]) => {
-                    const input = document.querySelector(`input[data-nom="${nom}"]`);
+                    const input = champParNom(nom);
                     if (input) input.value = r.valeur;
                 });
                 afficherAlerteExistant(visibles);
@@ -242,7 +256,7 @@ function calculerDifferences() {
 
 function afficherAlerteExistant(releves) {
     const alerte = document.getElementById('alerte-existant');
-    const details = releves.map(r => `${r.nom}: ${r.valeur} (${r.utilisateur})`).join(', ');
+    const details = releves.map(r => `${echapperHtml(r.nom)}: ${echapperHtml(r.valeur)} (${echapperHtml(r.utilisateur)})`).join(', ');
     alerte.innerHTML = `
         <strong>Attention !</strong> Des relevés existent déjà pour cette date : ${details}
     `;

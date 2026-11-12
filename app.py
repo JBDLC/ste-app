@@ -2217,7 +2217,8 @@ def init_db():
                 ('TAR1 Appoint', 'totalisateur', 'm³', 'hebdomadaire', 'semaine'),
                 ('TAR1 Purge', 'totalisateur', 'm³', 'hebdomadaire', 'semaine'),
                 ('TAR2 Appoint', 'totalisateur', 'm³', 'hebdomadaire', 'semaine'),
-                ('TAR2 Purge', 'totalisateur', 'm³', 'hebdomadaire', 'semaine')
+                ('TAR2 Purge', 'totalisateur', 'm³', 'hebdomadaire', 'semaine'),
+                ('Alimentation tunnel 10"', 'totalisateur', 'm³', 'quotidien')
             ]
             
             for nom, type_mesure, unite, frequence, *args in types_lpz:
@@ -2318,6 +2319,15 @@ def init_db():
                         frequence='hebdomadaire',
                         jour_specifique='semaine'
                     ))
+            nom_tunnel = 'Alimentation tunnel 10"'
+            if not TypeReleve.query.filter_by(nom=nom_tunnel, site_id=lpz.id).first():
+                db.session.add(TypeReleve(
+                    nom=nom_tunnel,
+                    site_id=lpz.id,
+                    type_mesure='totalisateur',
+                    unite='m³',
+                    frequence='quotidien'
+                ))
             db.session.commit()
         print("✅ Base de données initialisée avec succès!")
 
